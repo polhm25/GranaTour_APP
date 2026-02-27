@@ -17,7 +17,7 @@ function translateAuthError(message: string): string {
   if (lower.includes('email already registered') || lower.includes('user already registered')) {
     return 'Este email ya está registrado';
   }
-  if (lower.includes('password should be at least')) {
+  if (lower.includes('password should be at least') || lower.includes('weak password')) {
     return 'La contraseña debe tener al menos 6 caracteres';
   }
   if (lower.includes('invalid email')) {
@@ -26,11 +26,18 @@ function translateAuthError(message: string): string {
   if (lower.includes('email not confirmed')) {
     return 'Debes confirmar tu email antes de iniciar sesión';
   }
-  if (lower.includes('too many requests')) {
+  if (lower.includes('too many requests') || lower.includes('rate limit')) {
     return 'Demasiados intentos. Espera unos minutos antes de volver a intentarlo';
   }
   if (lower.includes('network') || lower.includes('fetch')) {
     return 'Error de red. Comprueba tu conexión a Internet';
+  }
+  if (lower.includes('signup is disabled')) {
+    return 'El registro está desactivado temporalmente';
+  }
+  // Errores de triggers o constraints en la base de datos
+  if (lower.includes('database error') || lower.includes('unexpected') || lower.includes('duplicate')) {
+    return 'Error al crear la cuenta. Comprueba que tus datos no estén ya registrados';
   }
 
   return 'Ha ocurrido un error. Inténtalo de nuevo';
@@ -140,7 +147,7 @@ export const useAuthStore = create<AuthState>()(
         try {
           // El trigger handle_new_user en la DB usa el metadata para crear
           // automáticamente la fila en USUARIOS al completar el registro.
-          const { error } = await supabase.auth.signUp({
+          const { data: authData, error } = await supabase.auth.signUp({
             email: data.email,
             password: data.password,
             options: {
@@ -154,15 +161,31 @@ export const useAuthStore = create<AuthState>()(
             },
           });
 
+          // Log para depuración: ver respuesta real de Supabase en la consola de Expo
+          if (__DEV__) {
+            console.log('[GranaTour] signUp response:', JSON.stringify(authData));
+          }
+
           if (error) {
+            // Log del error real para facilitar el diagnóstico
+            console.error('[GranaTour] signUp error:', error.message, error);
             set({ error: translateAuthError(error.message), loading: false });
             throw error;
+          }
+
+          // BUG-03: Supabase devuelve éxito silencioso con identities vacío
+          // cuando email confirmation está activo y el email ya está registrado.
+          if (authData.user?.identities?.length === 0) {
+            const msg = 'Este email ya está registrado';
+            set({ error: msg, loading: false });
+            throw new Error(msg);
           }
 
           // La sesión y el user se gestionan desde onAuthStateChange en _layout.tsx.
           // Aquí solo limpiamos el estado de carga.
           set({ loading: false });
         } catch (error) {
+          console.error('[GranaTour] signUp catch:', (error as Error).message);
           set((state) => ({
             loading: false,
             error: state.error ?? translateAuthError((error as Error).message),

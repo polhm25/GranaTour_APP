@@ -10,7 +10,7 @@
 | Fase | Nombre | Estado | Fecha fin |
 |------|--------|--------|-----------|
 | 0 | Setup inicial | ✅ COMPLETADA | 2026-02-27 |
-| 1 | Autenticación | 🔄 EN CURSO | - |
+| 1 | Autenticación | ✅ COMPLETADA | 2026-02-27 |
 | 2 | Explorar excursiones | ⏳ Pendiente | - |
 | 3 | Sistema de reservas | ⏳ Pendiente | - |
 | 4 | Mapa interactivo | ⏳ Pendiente | - |
@@ -83,15 +83,20 @@ Login, registro y recuperación de contraseña con Supabase Auth.
 - [x] Feedback visual: loading states, mensajes de error en español, banners rojo/verde
 
 ### Criterio de éxito
-- [ ] Crear cuenta nueva exitosamente
-- [ ] Login con cuenta existente
-- [ ] Cerrar sesión
-- [ ] Reabrir app y seguir logueado (persistencia)
-- [ ] Recuperación de contraseña por email
+- [x] Crear cuenta nueva exitosamente
+- [x] Login con cuenta existente
+- [x] Cerrar sesión
+- [x] Reabrir app y seguir logueado (persistencia)
+- [x] Recuperación de contraseña por email
+
+### Fix crítico de DB (fuera del código móvil)
+- Trigger `handle_new_user` corregido: tabla `usuarios` en minúsculas
+- Política RLS añadida: `CREATE POLICY "Trigger puede registrar usuarios" ON usuarios FOR INSERT WITH CHECK (true)`
+- En Supabase Cloud, `SECURITY DEFINER` no bypasea RLS → siempre añadir política INSERT explícita para triggers
 
 ---
 
-## FASE 2 - Explorar excursiones ⏳ Pendiente
+## FASE 2 - Explorar excursiones 🔄 SIGUIENTE
 
 ### Tareas planificadas
 - [ ] `excursionsStore.ts` → fetchExcursions, filtros, búsqueda

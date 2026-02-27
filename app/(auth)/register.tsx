@@ -18,8 +18,11 @@ import type { SignUpData } from '@/stores/authStore';
 
 // ─── Validaciones locales ─────────────────────────────────────────────────────
 
+// BUG-06: validación más estricta que solo `includes('@')`
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 function isValidEmail(email: string): boolean {
-  return email.includes('@') && email.trim().length > 0;
+  return EMAIL_REGEX.test(email.trim());
 }
 
 // Acepta DNI (8 dígitos + letra) o NIE (X/Y/Z + 7 dígitos + letra)
@@ -145,20 +148,20 @@ export default function RegisterScreen() {
   const passwordRef = useRef<TextInput>(null);
   const confirmPasswordRef = useRef<TextInput>(null);
 
-  // Limpia el error inline del campo y el error del store al modificar cualquier campo
-  function clearFieldError(field: keyof FormErrors) {
+  // BUG-04: clearFieldError estable para evitar stale closures en los handlers
+  const clearFieldError = useCallback((field: keyof FormErrors) => {
     setFormErrors((prev) => ({ ...prev, [field]: undefined }));
-    if (error) clearError();
-  }
+    clearError();
+  }, [clearError]);
 
-  const handleNombreChange = useCallback((text: string) => { setNombre(text); clearFieldError('nombre'); }, [error]);
-  const handleAp1Change = useCallback((text: string) => { setAp1(text); clearFieldError('ap1'); }, [error]);
-  const handleAp2Change = useCallback((text: string) => { setAp2(text); clearFieldError('ap2'); }, [error]);
-  const handleDniChange = useCallback((text: string) => { setDni(text); clearFieldError('dni'); }, [error]);
-  const handleEmailChange = useCallback((text: string) => { setEmail(text); clearFieldError('email'); }, [error]);
-  const handleTelefonoChange = useCallback((text: string) => { setTelefono(text); clearFieldError('telefono'); }, [error]);
-  const handlePasswordChange = useCallback((text: string) => { setPassword(text); clearFieldError('password'); }, [error]);
-  const handleConfirmPasswordChange = useCallback((text: string) => { setConfirmPassword(text); clearFieldError('confirmPassword'); }, [error]);
+  const handleNombreChange = useCallback((text: string) => { setNombre(text); clearFieldError('nombre'); }, [clearFieldError]);
+  const handleAp1Change = useCallback((text: string) => { setAp1(text); clearFieldError('ap1'); }, [clearFieldError]);
+  const handleAp2Change = useCallback((text: string) => { setAp2(text); clearFieldError('ap2'); }, [clearFieldError]);
+  const handleDniChange = useCallback((text: string) => { setDni(text); clearFieldError('dni'); }, [clearFieldError]);
+  const handleEmailChange = useCallback((text: string) => { setEmail(text); clearFieldError('email'); }, [clearFieldError]);
+  const handleTelefonoChange = useCallback((text: string) => { setTelefono(text); clearFieldError('telefono'); }, [clearFieldError]);
+  const handlePasswordChange = useCallback((text: string) => { setPassword(text); clearFieldError('password'); }, [clearFieldError]);
+  const handleConfirmPasswordChange = useCallback((text: string) => { setConfirmPassword(text); clearFieldError('confirmPassword'); }, [clearFieldError]);
 
   // Validación completa antes de enviar
   function validateForm(): boolean {

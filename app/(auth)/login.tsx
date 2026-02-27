@@ -17,8 +17,10 @@ import { useAuthStore } from '@/stores/authStore';
 
 // ─── Validaciones locales ─────────────────────────────────────────────────────
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 function isValidEmail(email: string): boolean {
-  return email.includes('@') && email.trim().length > 0;
+  return EMAIL_REGEX.test(email.trim());
 }
 
 function isValidPassword(password: string): boolean {
