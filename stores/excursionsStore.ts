@@ -3,6 +3,24 @@ import { create } from 'zustand';
 import { supabase } from '@/lib/supabase';
 import type { ExcursionConGuia, DificultadExcursion } from '@/lib/types';
 
+// Devuelve un mensaje de error amigable en español según el contexto de la operación.
+// Siempre loguea el error técnico original antes de devolver el mensaje público.
+function getExcursionErrorMessage(error: unknown, context: string): string {
+  console.error('[ExcursionsStore]', context, error);
+  switch (context) {
+    case 'list':
+      return 'No se pudieron cargar las excursiones. Inténtalo de nuevo.';
+    case 'detail':
+      return 'No se pudo cargar la excursión. Inténtalo de nuevo.';
+    case 'featured':
+      return 'No se pudieron cargar las excursiones destacadas.';
+    case 'upcoming':
+      return 'No se pudieron cargar las próximas excursiones.';
+    default:
+      return 'Se produjo un error inesperado. Inténtalo de nuevo.';
+  }
+}
+
 export interface ExcursionFilters {
   zona?: string;
   dificultad?: DificultadExcursion;
@@ -44,7 +62,11 @@ interface ExcursionsState {
   upcomingExcursions: ExcursionConGuia[];
   filters: ExcursionFilters;
   searchText: string;
+  // loading general: usado por fetchExcursions y getExcursionById
   loading: boolean;
+  // flags granulares para los fetches paralelos del Home
+  loadingFeatured: boolean;
+  loadingUpcoming: boolean;
   error: string | null;
 
   // Acciones de fetch
@@ -71,6 +93,8 @@ export const useExcursionsStore = create<ExcursionsState>((set, get) => ({
   filters: {},
   searchText: '',
   loading: false,
+  loadingFeatured: false,
+  loadingUpcoming: false,
   error: null,
 
   // ─── fetchExcursions ────────────────────────────────────────────────────────
@@ -88,7 +112,7 @@ export const useExcursionsStore = create<ExcursionsState>((set, get) => ({
 
       set({ excursions: (data as unknown as ExcursionConGuia[]) ?? [] });
     } catch (error) {
-      set({ error: (error as Error).message });
+      set({ error: getExcursionErrorMessage(error, 'list') });
     } finally {
       set({ loading: false });
     }
@@ -97,7 +121,8 @@ export const useExcursionsStore = create<ExcursionsState>((set, get) => ({
   // ─── getExcursionById ───────────────────────────────────────────────────────
   // Trae una excursión específica con JOIN al guía y la guarda en currentExcursion
   getExcursionById: async (id: number) => {
-    set({ loading: true, error: null });
+    // Limpiar currentExcursion al inicio para evitar mostrar datos de la excursión anterior
+    set({ currentExcursion: null, loading: true, error: null });
     try {
       const { data, error } = await supabase
         .from('excursiones')
@@ -111,7 +136,7 @@ export const useExcursionsStore = create<ExcursionsState>((set, get) => ({
       set({ currentExcursion: excursion });
       return excursion;
     } catch (error) {
-      set({ error: (error as Error).message });
+      set({ error: getExcursionErrorMessage(error, 'detail') });
       return null;
     } finally {
       set({ loading: false });
@@ -124,7 +149,7 @@ export const useExcursionsStore = create<ExcursionsState>((set, get) => ({
   // Supabase no permite order() sobre campos de relaciones embebidas, por lo que
   // se ordena en cliente: primero las que tienen guía con valoración, luego por fecha.
   fetchFeaturedExcursions: async () => {
-    set({ loading: true, error: null });
+    set({ loadingFeatured: true, error: null });
     try {
       const { data, error } = await supabase
         .from('excursiones')
@@ -149,17 +174,17 @@ export const useExcursionsStore = create<ExcursionsState>((set, get) => ({
       set({ featuredExcursions: featured });
       return featured;
     } catch (error) {
-      set({ error: (error as Error).message });
+      set({ error: getExcursionErrorMessage(error, 'featured') });
       return [];
     } finally {
-      set({ loading: false });
+      set({ loadingFeatured: false });
     }
   },
 
   // ─── fetchUpcomingExcursions ────────────────────────────────────────────────
   // Excursiones activas con fecha_inicio >= hoy, límite 10, ordenadas por fecha ASC
   fetchUpcomingExcursions: async () => {
-    set({ loading: true, error: null });
+    set({ loadingUpcoming: true, error: null });
     try {
       // Fecha de hoy en formato 'YYYY-MM-DD' para comparar con el campo DATE de PostgreSQL
       const today = new Date().toISOString().split('T')[0];
@@ -178,10 +203,10 @@ export const useExcursionsStore = create<ExcursionsState>((set, get) => ({
       set({ upcomingExcursions: upcoming });
       return upcoming;
     } catch (error) {
-      set({ error: (error as Error).message });
+      set({ error: getExcursionErrorMessage(error, 'upcoming') });
       return [];
     } finally {
-      set({ loading: false });
+      set({ loadingUpcoming: false });
     }
   },
 

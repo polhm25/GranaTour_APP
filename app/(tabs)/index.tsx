@@ -28,16 +28,25 @@ export default function HomeScreen() {
   const { user } = useAuth();
 
   // ── Selector del store con useShallow ────────────────────────────────────
-  const { featuredExcursions, upcomingExcursions, loading, fetchFeaturedExcursions, fetchUpcomingExcursions } =
-    useExcursionsStore(
-      useShallow((state) => ({
-        featuredExcursions: state.featuredExcursions,
-        upcomingExcursions: state.upcomingExcursions,
-        loading: state.loading,
-        fetchFeaturedExcursions: state.fetchFeaturedExcursions,
-        fetchUpcomingExcursions: state.fetchUpcomingExcursions,
-      }))
-    );
+  // Se usan flags granulares para que cada sección tenga su propio estado de carga
+  // independiente, evitando que el primero en resolver apague el spinner del otro.
+  const {
+    featuredExcursions,
+    upcomingExcursions,
+    loadingFeatured,
+    loadingUpcoming,
+    fetchFeaturedExcursions,
+    fetchUpcomingExcursions,
+  } = useExcursionsStore(
+    useShallow((state) => ({
+      featuredExcursions: state.featuredExcursions,
+      upcomingExcursions: state.upcomingExcursions,
+      loadingFeatured: state.loadingFeatured,
+      loadingUpcoming: state.loadingUpcoming,
+      fetchFeaturedExcursions: state.fetchFeaturedExcursions,
+      fetchUpcomingExcursions: state.fetchUpcomingExcursions,
+    }))
+  );
 
   // ── Carga paralela de destacadas y próximas al montar ────────────────────
   useEffect(() => {
@@ -100,7 +109,7 @@ export default function HomeScreen() {
           </View>
 
           {/* Scroll horizontal de excursiones destacadas */}
-          {loading && featuredExcursions.length === 0 ? (
+          {loadingFeatured && featuredExcursions.length === 0 ? (
             // Skeletons horizontales durante la carga
             <ScrollView
               horizontal
@@ -151,7 +160,7 @@ export default function HomeScreen() {
           </View>
 
           {/* Lista vertical de excursiones próximas */}
-          {loading && upcomingExcursions.length === 0 ? (
+          {loadingUpcoming && upcomingExcursions.length === 0 ? (
             // Skeletons verticales durante la carga
             <View className="px-4">
               <ActivityIndicator

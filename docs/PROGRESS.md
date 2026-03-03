@@ -1,7 +1,7 @@
 # PROGRESS.md - Estado del desarrollo GranaTour
 
 > Registro del progreso real por fases. Actualizar al completar cada tarea o fase.
-> Última actualización: 2026-02-27
+> Última actualización: 2026-03-03
 
 ---
 
@@ -11,7 +11,7 @@
 |------|--------|--------|-----------|
 | 0 | Setup inicial | ✅ COMPLETADA | 2026-02-27 |
 | 1 | Autenticación | ✅ COMPLETADA | 2026-02-27 |
-| 2 | Explorar excursiones | ⏳ Pendiente | - |
+| 2 | Explorar excursiones | ✅ COMPLETADA | 2026-03-03 |
 | 3 | Sistema de reservas | ⏳ Pendiente | - |
 | 4 | Mapa interactivo | ⏳ Pendiente | - |
 | 5 | GPS Tracking | ⏳ Pendiente | - |
@@ -96,15 +96,26 @@ Login, registro y recuperación de contraseña con Supabase Auth.
 
 ---
 
-## FASE 2 - Explorar excursiones 🔄 SIGUIENTE
+## FASE 2 - Explorar excursiones ✅ COMPLETADA
 
-### Tareas planificadas
-- [ ] `excursionsStore.ts` → fetchExcursions, filtros, búsqueda
-- [ ] Pantalla Explorar → lista ExcursionCards
-- [ ] Filtros: zona, dificultad, precio, fecha
-- [ ] Búsqueda por texto
-- [ ] Pantalla detalle excursión → info + guía + reviews + botón reservar
-- [ ] Pantalla Home/Feed → destacadas y próximas
+### Tareas completadas
+- [x] `excursionsStore.ts` → fetchExcursions, getExcursionById, fetchFeaturedExcursions, fetchUpcomingExcursions, getFilteredExcursions
+- [x] `components/ExcursionCard.tsx` → tarjeta reutilizable con imagen, dificultad, stats, precio, plazas
+- [x] `components/ui/FilterSheet.tsx` → modal bottom sheet con filtros de zona, dificultad y precio
+- [x] `app/(tabs)/explore.tsx` → FlatList con búsqueda (debounce 300ms), filtros con badge de activos, estados loading/error/vacío
+- [x] `app/(tabs)/index.tsx` → Home con saludo, sección horizontal destacadas, sección vertical próximas, skeletons
+- [x] `app/excursion/[id].tsx` → detalle completo con hero image, stats, guía, coordenadas, botón Reservar sticky
+- [x] Fix: flags `loadingFeatured`/`loadingUpcoming` separados para fetches paralelos
+- [x] Fix: `currentExcursion` se limpia al iniciar `getExcursionById`
+- [x] Fix: mensajes de error genéricos en español (no se exponen errores de Supabase/PostgreSQL)
+- [x] Code review completado y bugs corregidos
+
+### Criterio de éxito
+- [x] Listar excursiones desde Supabase
+- [x] Filtrar por zona, dificultad, precio
+- [x] Buscar por texto (nombre_ruta, zona)
+- [x] Ver detalle completo de excursión
+- [x] Home con excursiones destacadas y próximas
 
 ---
 
