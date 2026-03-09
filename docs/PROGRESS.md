@@ -126,7 +126,13 @@ Login, registro y recuperación de contraseña con Supabase Auth.
 - [x] `app/excursion/[id].tsx` → booking sheet (Modal) con selector de personas, cálculo de precio en real-time y confirmación
 - [x] `app/(tabs)/bookings.tsx` → lista con 3 tabs (Próximas / Historial / Canceladas), recarga en useFocusEffect
 - [x] `app/booking/[id].tsx` → detalle de reserva con badge de estado y botón cancelar con confirmación
-- [x] RPCs en Supabase: `decrementar_plazas` e `incrementar_plazas` para gestión atómica de plazas
+- [x] RPCs en Supabase: `decrementar_plazas`, `incrementar_plazas` y `crear_reserva_atomica`
+- [x] Fix post-review: race condition createBooking → RPC atómico (C-01)
+- [x] Fix post-review: filtro id_usuario en getBookingById y cancelBooking (C-02, C-03)
+- [x] Fix post-review: tab Historial filtra por fecha_inicio < hoy (I-01)
+- [x] Fix post-review: modal cancelación no cierra al tocar el box (I-09)
+- [x] Fix post-review: useCallback + useEffect deps en screens (I-05, I-06)
+- [x] Fix post-review: logs de RPC en todos los entornos, no solo __DEV__ (I-08)
 
 ### Criterio de éxito
 - [x] Flujo completo reservar → ver en mis reservas → cancelar

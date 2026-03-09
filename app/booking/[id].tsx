@@ -1,5 +1,5 @@
 // Pantalla de detalle de una reserva individual con opción de cancelar
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -59,15 +59,15 @@ export default function BookingDetailScreen() {
       }))
     );
 
-  // ── Carga al montar ───────────────────────────────────────────────────────
+  // ── Carga al montar ─── I-06: getBookingById incluido en deps ────────────
   useEffect(() => {
     if (!isNaN(bookingId)) {
       getBookingById(bookingId);
     }
-  }, [bookingId]);
+  }, [bookingId, getBookingById]);
 
-  // ── Cancelar reserva ──────────────────────────────────────────────────────
-  async function handleCancel() {
+  // ── Cancelar reserva ─── I-05: useCallback para estabilizar la referencia ─
+  const handleCancel = useCallback(async () => {
     setShowCancelModal(false);
     const ok = await cancelBooking(bookingId);
     if (ok) {
@@ -75,7 +75,7 @@ export default function BookingDetailScreen() {
         { text: 'Aceptar', onPress: () => router.back() },
       ]);
     }
-  }
+  }, [bookingId, cancelBooking, router]);
 
   // ── Id inválido ───────────────────────────────────────────────────────────
   if (isNaN(bookingId)) {
@@ -220,33 +220,36 @@ export default function BookingDetailScreen() {
         animationType="fade"
         onRequestClose={() => setShowCancelModal(false)}
       >
-        <Pressable style={styles.modalOverlay} onPress={() => setShowCancelModal(false)}>
+        {/* I-09: overlay absoluto + box centrado separados para que tocar dentro del box
+            no propague al overlay y cierre el modal involuntariamente */}
+        <View style={styles.modalContainer}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setShowCancelModal(false)} />
           <View style={styles.modalBox}>
-            <Text className="text-neutral-800 font-bold mb-2" style={styles.modalTitle}>
-              ¿Cancelar reserva?
+          <Text className="text-neutral-800 font-bold mb-2" style={styles.modalTitle}>
+            ¿Cancelar reserva?
+          </Text>
+          <Text className="text-neutral-500 text-center mb-6" style={styles.modalBody}>
+            Esta acción no se puede deshacer. Las plazas se liberarán automáticamente.
+          </Text>
+          <TouchableOpacity
+            onPress={handleCancel}
+            style={styles.modalConfirmButton}
+            activeOpacity={0.85}
+          >
+            <Text className="text-white font-bold" style={styles.modalButtonText}>
+              Sí, cancelar reserva
             </Text>
-            <Text className="text-neutral-500 text-center mb-6" style={styles.modalBody}>
-              Esta acción no se puede deshacer. Las plazas se liberarán automáticamente.
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => setShowCancelModal(false)}
+            className="mt-3 items-center py-2"
+          >
+            <Text className="text-neutral-400" style={styles.modalButtonText}>
+              No, mantener reserva
             </Text>
-            <TouchableOpacity
-              onPress={handleCancel}
-              style={styles.modalConfirmButton}
-              activeOpacity={0.85}
-            >
-              <Text className="text-white font-bold" style={styles.modalButtonText}>
-                Sí, cancelar reserva
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => setShowCancelModal(false)}
-              className="mt-3 items-center py-2"
-            >
-              <Text className="text-neutral-400" style={styles.modalButtonText}>
-                No, mantener reserva
-              </Text>
-            </TouchableOpacity>
+          </TouchableOpacity>
           </View>
-        </Pressable>
+        </View>
       </Modal>
     </View>
   );
@@ -361,8 +364,8 @@ const styles = StyleSheet.create({
   cancelButtonText: {
     fontSize: 16,
   },
-  // Modal
-  modalOverlay: {
+  // Modal: container con overlay absoluto + box centrado (I-09)
+  modalContainer: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
     alignItems: 'center',

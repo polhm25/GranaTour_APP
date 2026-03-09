@@ -16,8 +16,19 @@ export interface NewBookingData {
 // ─── Mapeo de errores genéricos ───────────────────────────────────────────────
 
 function getBookingErrorMessage(error: unknown, context: string): string {
-  if (__DEV__) console.error(`[GranaTour] bookingsStore.${context}:`, error);
+  // Siempre logueamos el error real (no solo en __DEV__)
+  console.error(`[GranaTour] bookingsStore.${context}:`, error);
   return 'No se pudo completar la operación. Inténtalo de nuevo';
+}
+
+// Mensaje específico para errores de createBooking (distingue sin plazas vs error genérico)
+function getCreateBookingErrorMessage(error: unknown): string {
+  console.error('[GranaTour] bookingsStore.createBooking:', error);
+  const msg = ((error as Error).message ?? '').toLowerCase();
+  if (msg.includes('plazas insuficientes') || msg.includes('insufficient')) {
+    return 'Ya no quedan plazas disponibles para esta excursión';
+  }
+  return 'No se pudo completar la reserva. Inténtalo de nuevo';
 }
 
 // ─── Estado e interfaz ────────────────────────────────────────────────────────
@@ -81,17 +92,25 @@ export const useBookingsStore = create<BookingsState>((set, get) => ({
 
   // ── getBookingById ─────────────────────────────────────────────────────────
   getBookingById: async (id: number) => {
+    const user = useAuthStore.getState().user;
     // Limpiar estado previo para evitar flash de datos viejos
     set({ currentBooking: null, loadingDetail: true, error: null });
     try {
-      const { data, error } = await supabase
+      // C-02: filtrar por id_usuario además de id_reserva para defensa en profundidad
+      const query = supabase
         .from('reservas')
         .select(`
           *,
           excursion:excursiones(id_excursion, nombre_ruta, zona, fecha_inicio, imagen_url)
         `)
-        .eq('id_reserva', id)
-        .single();
+        .eq('id_reserva', id);
+
+      // Si tenemos usuario añadimos el filtro; RLS también lo protege en Supabase
+      if (user) {
+        query.eq('id_usuario', user.id_usuario);
+      }
+
+      const { data, error } = await query.single();
 
       if (error) throw error;
 
@@ -105,6 +124,9 @@ export const useBookingsStore = create<BookingsState>((set, get) => ({
   },
 
   // ── createBooking ──────────────────────────────────────────────────────────
+  // C-01: Usa RPC atómico `crear_reserva_atomica` que verifica plazas,
+  // las decrementa y crea la reserva en una única transacción de PostgreSQL.
+  // Esto evita overbooking por concurrencia.
   createBooking: async (data: NewBookingData) => {
     const user = useAuthStore.getState().user;
     if (!user) return null;
@@ -113,41 +135,27 @@ export const useBookingsStore = create<BookingsState>((set, get) => ({
     try {
       const precio_total = data.num_personas * data.precio_persona;
 
-      // 1. Insertar la reserva
-      const { data: newBooking, error: insertError } = await supabase
-        .from('reservas')
-        .insert({
-          id_usuario: user.id_usuario,
-          id_excursion: data.id_excursion,
-          num_personas: data.num_personas,
-          precio_total,
-          estado: 'pendiente',
-          notas: data.notas ?? null,
-        })
-        .select()
-        .single();
+      const { data: newBooking, error: rpcError } = await supabase.rpc(
+        'crear_reserva_atomica',
+        {
+          p_id_usuario: user.id_usuario,
+          p_id_excursion: data.id_excursion,
+          p_num_personas: data.num_personas,
+          p_precio_total: precio_total,
+          p_notas: data.notas ?? null,
+        }
+      );
 
-      if (insertError) throw insertError;
+      if (rpcError) throw rpcError;
 
-      // 2. Decrementar plazas disponibles en la excursión
-      const { error: updateError } = await supabase.rpc('decrementar_plazas', {
-        p_id_excursion: data.id_excursion,
-        p_num_personas: data.num_personas,
-      });
-
-      // Si el RPC falla lo logueamos pero no bloqueamos: la reserva ya fue creada
-      if (updateError && __DEV__) {
-        console.error('[GranaTour] decrementar_plazas error:', updateError);
-      }
-
-      // 3. Refrescar la lista de reservas en background
+      // Refrescar la lista de reservas en background
       get().fetchBookings();
 
       set({ loadingCreate: false });
       return newBooking as Reserva;
     } catch (error) {
       set({
-        error: getBookingErrorMessage(error, 'createBooking'),
+        error: getCreateBookingErrorMessage(error),
         loadingCreate: false,
       });
       return null;
@@ -156,32 +164,42 @@ export const useBookingsStore = create<BookingsState>((set, get) => ({
 
   // ── cancelBooking ──────────────────────────────────────────────────────────
   cancelBooking: async (bookingId: number) => {
+    const user = useAuthStore.getState().user;
     set({ loadingCancel: true, error: null });
     try {
-      // 1. Buscar la reserva para conocer id_excursion y num_personas
-      const booking = get().bookings.find((b) => b.id_reserva === bookingId)
-        ?? get().currentBooking;
+      // Buscar datos de la reserva para saber cuántas plazas devolver
+      const booking =
+        get().bookings.find((b) => b.id_reserva === bookingId) ??
+        get().currentBooking;
 
-      const { error: updateError } = await supabase
+      // C-03: filtrar por id_usuario además de id_reserva para defensa en profundidad
+      const updateQuery = supabase
         .from('reservas')
         .update({ estado: 'cancelada' })
         .eq('id_reserva', bookingId);
 
+      if (user) {
+        updateQuery.eq('id_usuario', user.id_usuario);
+      }
+
+      const { error: updateError } = await updateQuery;
+
       if (updateError) throw updateError;
 
-      // 2. Devolver plazas si teníamos los datos de la reserva
+      // Devolver plazas usando el RPC atómico
       if (booking) {
         const { error: rpcError } = await supabase.rpc('incrementar_plazas', {
           p_id_excursion: booking.id_excursion,
           p_num_personas: booking.num_personas,
         });
 
-        if (rpcError && __DEV__) {
+        // Siempre logueamos el error (no solo en __DEV__)
+        if (rpcError) {
           console.error('[GranaTour] incrementar_plazas error:', rpcError);
         }
       }
 
-      // 3. Actualizar el estado local sin recargar toda la lista
+      // Actualizar estado local sin recargar toda la lista
       set((state) => ({
         bookings: state.bookings.map((b) =>
           b.id_reserva === bookingId ? { ...b, estado: 'cancelada' } : b

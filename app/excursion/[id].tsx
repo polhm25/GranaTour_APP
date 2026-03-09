@@ -1,7 +1,7 @@
 // Pantalla de detalle de una excursión.
 // Muestra imagen hero, info completa, guía asignado y botón flotante de reserva.
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -60,21 +60,21 @@ export default function ExcursionDetailScreen() {
   const [showSheet, setShowSheet] = useState(false);
   const [numPersonas, setNumPersonas] = useState(1);
 
-  // ── Carga al montar ───────────────────────────────────────────────────────
+  // ── Carga al montar ─── I-06: getExcursionById incluido en deps ──────────
   useEffect(() => {
     if (!isNaN(excursionId)) {
       getExcursionById(excursionId);
     }
-  }, [excursionId]);
+  }, [excursionId, getExcursionById]);
 
-  // Resetear personas al abrir el sheet
-  function openSheet() {
+  // ── Resetear personas al abrir el sheet ─── I-05: useCallback ───────────
+  const openSheet = useCallback(() => {
     setNumPersonas(1);
     setShowSheet(true);
-  }
+  }, []);
 
-  // ── Confirmar reserva ─────────────────────────────────────────────────────
-  async function handleConfirmBooking() {
+  // ── Confirmar reserva ─── I-05: useCallback ───────────────────────────────
+  const handleConfirmBooking = useCallback(async () => {
     if (!currentExcursion) return;
 
     const result = await createBooking({
@@ -88,7 +88,7 @@ export default function ExcursionDetailScreen() {
       // Navegar a la pestaña de reservas para ver la nueva reserva
       router.replace('/(tabs)/bookings');
     }
-  }
+  }, [currentExcursion, numPersonas, createBooking, router]);
 
   // ── Validación de id inválido ─────────────────────────────────────────────
   if (isNaN(excursionId)) {

@@ -1,5 +1,5 @@
 // Tab 4: Mis reservas — lista de reservas del usuario con tabs de estado
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -29,12 +29,10 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: 'canceladas', label: 'Canceladas' },
 ];
 
-// Mapea cada tab a los estados de reserva que muestra
-const TAB_ESTADOS: Record<TabKey, EstadoReserva[]> = {
-  proximas: ['pendiente', 'confirmada'],
-  historial: ['confirmada'],
-  canceladas: ['cancelada'],
-};
+// I-01: La lógica de tabs filtra también por fecha de excursión, no solo por estado.
+// - proximas: pendiente o confirmada, fecha_excursion >= hoy
+// - historial: no cancelada, fecha_excursion < hoy (ya realizadas)
+// - canceladas: estado cancelada (cualquier fecha)
 
 // Colores del badge de estado
 const ESTADO_COLORS: Record<EstadoReserva, string> = {
@@ -130,10 +128,21 @@ export default function BookingsScreen() {
     }, [fetchBookings])
   );
 
-  // Filtrar reservas según el tab activo
-  const filteredBookings = bookings.filter((b) =>
-    TAB_ESTADOS[activeTab].includes(b.estado)
-  );
+  // I-04: useMemo para no recalcular en cada render
+  // I-01: filtro combinado por estado Y fecha de excursión
+  const filteredBookings = useMemo(() => {
+    const today = new Date().toISOString().split('T')[0]; // 'YYYY-MM-DD'
+    return bookings.filter((b) => {
+      const fechaExcursion = b.excursion?.fecha_inicio ?? '';
+      if (activeTab === 'proximas') {
+        return (b.estado === 'pendiente' || b.estado === 'confirmada') && fechaExcursion >= today;
+      }
+      if (activeTab === 'historial') {
+        return b.estado !== 'cancelada' && fechaExcursion < today;
+      }
+      return b.estado === 'cancelada';
+    });
+  }, [bookings, activeTab]);
 
   // ── Render vacío ──────────────────────────────────────────────────────────
   function renderEmpty() {
