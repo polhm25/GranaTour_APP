@@ -12,7 +12,7 @@
 | 0 | Setup inicial | ✅ COMPLETADA | 2026-02-27 |
 | 1 | Autenticación | ✅ COMPLETADA | 2026-02-27 |
 | 2 | Explorar excursiones | ✅ COMPLETADA | 2026-03-03 |
-| 3 | Sistema de reservas | ⏳ Pendiente | - |
+| 3 | Sistema de reservas | ✅ COMPLETADA | 2026-03-09 |
 | 4 | Mapa interactivo | ⏳ Pendiente | - |
 | 5 | GPS Tracking | ⏳ Pendiente | - |
 | 6 | Fotos geolocalizadas | ⏳ Pendiente | - |
@@ -116,6 +116,20 @@ Login, registro y recuperación de contraseña con Supabase Auth.
 - [x] Buscar por texto (nombre_ruta, zona)
 - [x] Ver detalle completo de excursión
 - [x] Home con excursiones destacadas y próximas
+
+---
+
+## FASE 3 - Sistema de reservas ✅ COMPLETADA
+
+### Tareas completadas
+- [x] `stores/bookingsStore.ts` → lógica completa con flags separados (loadingList, loadingDetail, loadingCreate, loadingCancel)
+- [x] `app/excursion/[id].tsx` → booking sheet (Modal) con selector de personas, cálculo de precio en real-time y confirmación
+- [x] `app/(tabs)/bookings.tsx` → lista con 3 tabs (Próximas / Historial / Canceladas), recarga en useFocusEffect
+- [x] `app/booking/[id].tsx` → detalle de reserva con badge de estado y botón cancelar con confirmación
+- [x] RPCs en Supabase: `decrementar_plazas` e `incrementar_plazas` para gestión atómica de plazas
+
+### Criterio de éxito
+- [x] Flujo completo reservar → ver en mis reservas → cancelar
 
 ---
 

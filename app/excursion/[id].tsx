@@ -1,11 +1,12 @@
 // Pantalla de detalle de una excursión.
 // Muestra imagen hero, info completa, guía asignado y botón flotante de reserva.
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Image,
+  Modal,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -19,6 +20,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS } from '@/lib/constants';
 import { formatDate, formatDuration, formatPrice, getDifficultyColor } from '@/lib/utils';
 import { useExcursionsStore } from '@/stores/excursionsStore';
+import { useBookingsStore } from '@/stores/bookingsStore';
 
 // Etiquetas en español para cada nivel de dificultad
 const DIFFICULTY_LABELS: Record<string, string> = {
@@ -32,12 +34,11 @@ export default function ExcursionDetailScreen() {
   const router = useRouter();
 
   // ── Parámetros de ruta ────────────────────────────────────────────────────
-  // useLocalSearchParams puede devolver string | string[]; normalizamos siempre a string.
   const params = useLocalSearchParams<{ id: string }>();
   const rawId = Array.isArray(params.id) ? params.id[0] : params.id;
   const excursionId = rawId ? parseInt(rawId, 10) : NaN;
 
-  // ── Selector del store con useShallow ────────────────────────────────────
+  // ── Store de excursiones ──────────────────────────────────────────────────
   const { currentExcursion, loading, error, getExcursionById } = useExcursionsStore(
     useShallow((state) => ({
       currentExcursion: state.currentExcursion,
@@ -47,12 +48,47 @@ export default function ExcursionDetailScreen() {
     }))
   );
 
+  // ── Store de reservas ─────────────────────────────────────────────────────
+  const { loadingCreate, createBooking } = useBookingsStore(
+    useShallow((state) => ({
+      loadingCreate: state.loadingCreate,
+      createBooking: state.createBooking,
+    }))
+  );
+
+  // ── Estado del booking sheet ──────────────────────────────────────────────
+  const [showSheet, setShowSheet] = useState(false);
+  const [numPersonas, setNumPersonas] = useState(1);
+
   // ── Carga al montar ───────────────────────────────────────────────────────
   useEffect(() => {
     if (!isNaN(excursionId)) {
       getExcursionById(excursionId);
     }
   }, [excursionId]);
+
+  // Resetear personas al abrir el sheet
+  function openSheet() {
+    setNumPersonas(1);
+    setShowSheet(true);
+  }
+
+  // ── Confirmar reserva ─────────────────────────────────────────────────────
+  async function handleConfirmBooking() {
+    if (!currentExcursion) return;
+
+    const result = await createBooking({
+      id_excursion: currentExcursion.id_excursion,
+      num_personas: numPersonas,
+      precio_persona: currentExcursion.precio_persona,
+    });
+
+    if (result) {
+      setShowSheet(false);
+      // Navegar a la pestaña de reservas para ver la nueva reserva
+      router.replace('/(tabs)/bookings');
+    }
+  }
 
   // ── Validación de id inválido ─────────────────────────────────────────────
   if (isNaN(excursionId)) {
@@ -109,7 +145,6 @@ export default function ExcursionDetailScreen() {
     );
   }
 
-  // A partir de aquí currentExcursion está garantizado como no-null
   if (!currentExcursion) return null;
 
   const {
@@ -129,17 +164,11 @@ export default function ExcursionDetailScreen() {
     guia,
   } = currentExcursion;
 
-  // Color e etiqueta del badge de dificultad
   const difficultyColor = dificultad ? getDifficultyColor(dificultad) : COLORS.neutral[400];
   const difficultyLabel = dificultad ? (DIFFICULTY_LABELS[dificultad] ?? dificultad) : null;
-
-  // Sin plazas disponibles
   const isSoldOut = plazas_disponibles === 0;
-
-  // ── Handler del botón de reserva ──────────────────────────────────────────
-  function handleReserve() {
-    Alert.alert('Próximamente', 'Reservas disponibles en la Fase 3');
-  }
+  const maxPersonas = Math.min(plazas_disponibles, 10); // máximo 10 personas por reserva
+  const precioTotal = numPersonas * precio_persona;
 
   // ── Render principal ──────────────────────────────────────────────────────
   return (
@@ -157,7 +186,6 @@ export default function ExcursionDetailScreen() {
               resizeMode="cover"
             />
           ) : (
-            // Placeholder cuando no hay imagen
             <View
               className="bg-primary-100 items-center justify-center"
               style={styles.heroImage}
@@ -166,18 +194,16 @@ export default function ExcursionDetailScreen() {
             </View>
           )}
 
-          {/* ── 2. Badge de dificultad (absolute, bottom-left sobre la imagen) */}
+          {/* Badge de dificultad */}
           {difficultyLabel && (
-            <View
-              style={[styles.difficultyBadge, { backgroundColor: difficultyColor }]}
-            >
+            <View style={[styles.difficultyBadge, { backgroundColor: difficultyColor }]}>
               <Text className="text-white font-semibold" style={styles.difficultyBadgeText}>
                 {difficultyLabel}
               </Text>
             </View>
           )}
 
-          {/* ── 3. Botón back (absolute, top-left sobre la imagen) ────────── */}
+          {/* Botón back */}
           <TouchableOpacity
             onPress={() => router.back()}
             style={styles.backButton}
@@ -187,28 +213,24 @@ export default function ExcursionDetailScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* ── 4. Info principal ───────────────────────────────────────────── */}
+        {/* ── 2. Info principal ───────────────────────────────────────────── */}
         <View className="px-4 pt-5 pb-4">
-          {/* Nombre de la ruta */}
           <Text className="text-neutral-800 font-bold mb-2" style={styles.routeName}>
             {nombre_ruta}
           </Text>
 
-          {/* Zona con icono de ubicación */}
           <Text className="text-neutral-500 mb-4" style={styles.zona}>
             📍 {zona}
           </Text>
 
-          {/* Fila de stats en pills grises */}
-          <View className="flex-row flex-wrap mb-4" style={styles.statsRow}>
-            {/* Duración */}
+          {/* Pills de stats */}
+          <View className="flex-row flex-wrap mb-4">
             <View className="bg-neutral-100 rounded-lg px-3 py-2 mr-2 mb-2">
               <Text className="text-neutral-600" style={styles.statText}>
                 ⏱ {formatDuration(duracion_horas)}
               </Text>
             </View>
 
-            {/* Distancia */}
             {distancia_km !== null && (
               <View className="bg-neutral-100 rounded-lg px-3 py-2 mr-2 mb-2">
                 <Text className="text-neutral-600" style={styles.statText}>
@@ -217,7 +239,6 @@ export default function ExcursionDetailScreen() {
               </View>
             )}
 
-            {/* Desnivel */}
             {desnivel_positivo !== null && (
               <View className="bg-neutral-100 rounded-lg px-3 py-2 mr-2 mb-2">
                 <Text className="text-neutral-600" style={styles.statText}>
@@ -226,7 +247,6 @@ export default function ExcursionDetailScreen() {
               </View>
             )}
 
-            {/* Precio */}
             <View className="bg-primary-50 rounded-lg px-3 py-2 mr-2 mb-2">
               <Text className="text-primary-700 font-semibold" style={styles.statText}>
                 💰 {formatPrice(precio_persona)}/persona
@@ -234,12 +254,10 @@ export default function ExcursionDetailScreen() {
             </View>
           </View>
 
-          {/* Fecha de inicio */}
           <Text className="text-neutral-600 mb-2" style={styles.dateText}>
             📅 {formatDate(fecha_inicio)}
           </Text>
 
-          {/* Plazas disponibles */}
           {isSoldOut ? (
             <Text className="text-error font-semibold mb-4" style={styles.seatsText}>
               Sin plazas disponibles
@@ -252,10 +270,9 @@ export default function ExcursionDetailScreen() {
           )}
         </View>
 
-        {/* Separador */}
         <View className="bg-neutral-200 mx-4" style={styles.separator} />
 
-        {/* ── 5. Descripción ───────────────────────────────────────────────── */}
+        {/* ── 3. Descripción ───────────────────────────────────────────────── */}
         {descripcion ? (
           <View className="px-4 py-5">
             <Text className="text-neutral-800 font-bold mb-3" style={styles.sectionTitle}>
@@ -267,7 +284,7 @@ export default function ExcursionDetailScreen() {
           </View>
         ) : null}
 
-        {/* ── 6. Guía asignado ─────────────────────────────────────────────── */}
+        {/* ── 4. Guía asignado ─────────────────────────────────────────────── */}
         {guia ? (
           <>
             <View className="bg-neutral-200 mx-4" style={styles.separator} />
@@ -276,14 +293,9 @@ export default function ExcursionDetailScreen() {
                 Tu guía
               </Text>
               <View className="flex-row items-center">
-                {/* Avatar del guía */}
                 {guia.avatar_url ? (
-                  <Image
-                    source={{ uri: guia.avatar_url }}
-                    style={styles.guideAvatar}
-                  />
+                  <Image source={{ uri: guia.avatar_url }} style={styles.guideAvatar} />
                 ) : (
-                  // Placeholder circular del avatar
                   <View
                     className="bg-primary-100 items-center justify-center"
                     style={styles.guideAvatar}
@@ -291,8 +303,6 @@ export default function ExcursionDetailScreen() {
                     <Text style={styles.guideAvatarPlaceholder}>👤</Text>
                   </View>
                 )}
-
-                {/* Nombre y valoración del guía */}
                 <View className="ml-3 flex-1">
                   <Text className="text-neutral-800 font-semibold" style={styles.guideName}>
                     {guia.nombre} {guia.ap1}
@@ -308,7 +318,7 @@ export default function ExcursionDetailScreen() {
           </>
         ) : null}
 
-        {/* ── 7. Punto de inicio (coordenadas) ─────────────────────────────── */}
+        {/* ── 5. Punto de inicio (coordenadas) ─────────────────────────────── */}
         {latitud !== null && longitud !== null ? (
           <>
             <View className="bg-neutral-200 mx-4" style={styles.separator} />
@@ -334,15 +344,14 @@ export default function ExcursionDetailScreen() {
           </>
         ) : null}
 
-        {/* Espacio inferior para que el botón flotante no tape el contenido */}
         <View style={styles.bottomSpacer} />
       </ScrollView>
 
-      {/* ── 8. Botón flotante de reserva (sticky inferior) ────────────────── */}
+      {/* ── 6. Botón flotante de reserva ──────────────────────────────────── */}
       <SafeAreaView edges={['bottom']} className="bg-white border-t border-neutral-200">
         <View className="px-4 py-3">
           <TouchableOpacity
-            onPress={handleReserve}
+            onPress={openSheet}
             disabled={isSoldOut}
             style={[
               styles.reserveButton,
@@ -356,6 +365,124 @@ export default function ExcursionDetailScreen() {
           </TouchableOpacity>
         </View>
       </SafeAreaView>
+
+      {/* ── 7. Booking sheet (Modal) ───────────────────────────────────────── */}
+      <Modal
+        visible={showSheet}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowSheet(false)}
+      >
+        {/* Overlay semitransparente */}
+        <Pressable style={styles.sheetOverlay} onPress={() => setShowSheet(false)} />
+
+        {/* Contenido del sheet */}
+        <View style={styles.sheetContainer}>
+          {/* Handle visual */}
+          <View style={styles.sheetHandle} />
+
+          {/* Cabecera */}
+          <Text className="text-neutral-800 font-bold mb-1" style={styles.sheetTitle}>
+            Reservar excursión
+          </Text>
+          <Text className="text-neutral-500 mb-6" style={styles.sheetSubtitle}>
+            {nombre_ruta}
+          </Text>
+
+          {/* Selector de personas */}
+          <View className="flex-row items-center justify-between mb-6">
+            <View>
+              <Text className="text-neutral-700 font-semibold" style={styles.sheetLabel}>
+                Número de personas
+              </Text>
+              <Text className="text-neutral-400 mt-0.5" style={styles.sheetLabelSub}>
+                Máximo {maxPersonas} por reserva
+              </Text>
+            </View>
+            <View className="flex-row items-center">
+              {/* Botón − */}
+              <TouchableOpacity
+                onPress={() => setNumPersonas((n) => Math.max(1, n - 1))}
+                disabled={numPersonas <= 1}
+                style={[
+                  styles.counterButton,
+                  numPersonas <= 1 && styles.counterButtonDisabled,
+                ]}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.counterButtonText}>−</Text>
+              </TouchableOpacity>
+
+              {/* Valor actual */}
+              <Text className="text-neutral-800 font-bold mx-4" style={styles.counterValue}>
+                {numPersonas}
+              </Text>
+
+              {/* Botón + */}
+              <TouchableOpacity
+                onPress={() => setNumPersonas((n) => Math.min(maxPersonas, n + 1))}
+                disabled={numPersonas >= maxPersonas}
+                style={[
+                  styles.counterButton,
+                  numPersonas >= maxPersonas && styles.counterButtonDisabled,
+                ]}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.counterButtonText}>+</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Desglose de precio */}
+          <View className="bg-neutral-50 rounded-xl p-4 mb-6">
+            <View className="flex-row justify-between mb-2">
+              <Text className="text-neutral-500" style={styles.priceRow}>
+                {formatPrice(precio_persona)} × {numPersonas}{' '}
+                {numPersonas === 1 ? 'persona' : 'personas'}
+              </Text>
+              <Text className="text-neutral-700" style={styles.priceRow}>
+                {formatPrice(precioTotal)}
+              </Text>
+            </View>
+            <View className="h-px bg-neutral-200 mb-2" />
+            <View className="flex-row justify-between">
+              <Text className="text-neutral-800 font-bold" style={styles.priceTotal}>
+                Total
+              </Text>
+              <Text className="text-primary-600 font-bold" style={styles.priceTotal}>
+                {formatPrice(precioTotal)}
+              </Text>
+            </View>
+          </View>
+
+          {/* Botón confirmar */}
+          <TouchableOpacity
+            onPress={handleConfirmBooking}
+            disabled={loadingCreate}
+            style={[styles.confirmButton, loadingCreate && styles.confirmButtonLoading]}
+            activeOpacity={0.85}
+          >
+            {loadingCreate ? (
+              <ActivityIndicator color="#FFFFFF" size="small" />
+            ) : (
+              <Text className="text-white font-bold text-center" style={styles.confirmButtonText}>
+                Confirmar reserva
+              </Text>
+            )}
+          </TouchableOpacity>
+
+          {/* Botón cancelar */}
+          <TouchableOpacity
+            onPress={() => setShowSheet(false)}
+            disabled={loadingCreate}
+            className="mt-3 items-center py-3"
+          >
+            <Text className="text-neutral-400" style={styles.cancelText}>
+              Cancelar
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -377,7 +504,6 @@ const styles = StyleSheet.create({
   heroPlaceholderIcon: {
     fontSize: 64,
   },
-  // Badge de dificultad sobre la imagen
   difficultyBadge: {
     position: 'absolute',
     bottom: 14,
@@ -389,7 +515,6 @@ const styles = StyleSheet.create({
   difficultyBadgeText: {
     fontSize: 12,
   },
-  // Botón back circular semitransparente
   backButton: {
     position: 'absolute',
     top: 14,
@@ -406,16 +531,13 @@ const styles = StyleSheet.create({
     color: COLORS.neutral[800],
     lineHeight: 22,
   },
-  // ── Info principal ───────────────────────────────────────────────────────
+  // ── Info ─────────────────────────────────────────────────────────────────
   routeName: {
     fontSize: 24,
     lineHeight: 30,
   },
   zona: {
     fontSize: 15,
-  },
-  statsRow: {
-    gap: 0, // gap gestionado con mr-2 mb-2 en cada pill
   },
   statText: {
     fontSize: 13,
@@ -430,7 +552,6 @@ const styles = StyleSheet.create({
   separator: {
     height: 1,
   },
-  // ── Secciones ────────────────────────────────────────────────────────────
   sectionTitle: {
     fontSize: 17,
   },
@@ -465,7 +586,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontStyle: 'italic',
   },
-  // ── Botón de reserva ─────────────────────────────────────────────────────
+  // ── Botón reservar ───────────────────────────────────────────────────────
   bottomSpacer: {
     height: 16,
   },
@@ -483,7 +604,7 @@ const styles = StyleSheet.create({
   reserveButtonText: {
     fontSize: 16,
   },
-  // ── Estados de carga/error ────────────────────────────────────────────────
+  // ── Estados carga/error ───────────────────────────────────────────────────
   loadingText: {
     fontSize: 14,
   },
@@ -495,5 +616,84 @@ const styles = StyleSheet.create({
   },
   backButtonText: {
     fontSize: 15,
+  },
+  // ── Booking sheet (Modal) ────────────────────────────────────────────────
+  sheetOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  sheetContainer: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    paddingBottom: 36,
+  },
+  sheetHandle: {
+    width: 40,
+    height: 4,
+    backgroundColor: COLORS.neutral[300],
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginBottom: 20,
+  },
+  sheetTitle: {
+    fontSize: 20,
+  },
+  sheetSubtitle: {
+    fontSize: 14,
+  },
+  sheetLabel: {
+    fontSize: 15,
+  },
+  sheetLabelSub: {
+    fontSize: 12,
+  },
+  // Contador de personas
+  counterButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: COLORS.primary[500],
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  counterButtonDisabled: {
+    backgroundColor: COLORS.neutral[200],
+  },
+  counterButtonText: {
+    fontSize: 20,
+    color: '#FFFFFF',
+    lineHeight: 24,
+    fontWeight: '600',
+  },
+  counterValue: {
+    fontSize: 22,
+    minWidth: 28,
+    textAlign: 'center',
+  },
+  // Desglose precio
+  priceRow: {
+    fontSize: 14,
+  },
+  priceTotal: {
+    fontSize: 16,
+  },
+  // Botón confirmar
+  confirmButton: {
+    backgroundColor: COLORS.primary[500],
+    borderRadius: 14,
+    paddingVertical: 15,
+    alignItems: 'center',
+  },
+  confirmButtonLoading: {
+    backgroundColor: COLORS.primary[300],
+  },
+  confirmButtonText: {
+    fontSize: 16,
+  },
+  cancelText: {
+    fontSize: 14,
   },
 });
