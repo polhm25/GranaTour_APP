@@ -136,12 +136,23 @@ app/
   excursion/[id].tsx, booking/[id].tsx
 ```
 
-### Fase 1 (en proceso)
+### Fase 1 (completada)
 ```
 app/(auth)/login.tsx         ← UI completa
 app/(auth)/register.tsx      ← UI completa
 app/(auth)/forgot-password.tsx ← UI completa
 stores/authStore.ts          ← lógica completa
+```
+
+### Fase 2 (completada)
+```
+stores/excursionsStore.ts    ← lógica completa con flags loadingFeatured/loadingUpcoming
+components/ExcursionCard.tsx ← tarjeta reutilizable
+components/ui/FilterSheet.tsx ← modal de filtros
+app/(tabs)/explore.tsx       ← lista + búsqueda + filtros
+app/(tabs)/index.tsx         ← Home con destacadas y próximas
+app/excursion/[id].tsx       ← detalle completo
+app/_layout.tsx              ← fix tabla 'usuarios' (minúsculas)
 ```
 
 ---

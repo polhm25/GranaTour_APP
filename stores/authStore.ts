@@ -107,6 +107,7 @@ export const useAuthStore = create<AuthState>()(
           });
 
           if (error) {
+            if (__DEV__) console.error('[GranaTour] signIn error:', error.message, error.status);
             set({ error: translateAuthError(error.message), loading: false });
             throw error;
           }
@@ -114,9 +115,9 @@ export const useAuthStore = create<AuthState>()(
           // Guardamos la sesión inmediatamente
           set({ session: data.session });
 
-          // Buscamos el perfil en la tabla USUARIOS vinculado al auth user
+          // Buscamos el perfil en la tabla usuarios vinculado al auth user
           const { data: userData, error: userError } = await supabase
-            .from('USUARIOS')
+            .from('usuarios')
             .select(
               'id_usuario, supabase_auth_id, nombre, ap1, ap2, dni, email, telefono, rol, password, avatar_url, bio, valoracion, num_turnos, total_km, total_excursiones, fecha_registro, ultimo_acceso'
             )

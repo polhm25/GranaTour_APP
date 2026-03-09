@@ -261,6 +261,16 @@ export default function LoginScreen() {
           >
             <Text className="text-base font-semibold text-secondary-500">Crear cuenta</Text>
           </TouchableOpacity>
+
+          {/* Botón de bypass solo en desarrollo */}
+          {__DEV__ && (
+            <TouchableOpacity
+              onPress={() => router.replace('/(tabs)')}
+              className="mt-4 items-center rounded-xl border border-dashed border-neutral-400 py-3"
+            >
+              <Text className="text-sm font-medium text-neutral-400">⚙ Dev Bypass</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </ScrollView>
     </KeyboardAvoidingView>

@@ -12,7 +12,7 @@ import type { Usuario } from '@/lib/types';
 // Busca el perfil del usuario en la tabla USUARIOS por su supabase_auth_id
 async function fetchUserProfile(authId: string): Promise<Usuario | null> {
   const { data, error } = await supabase
-    .from('USUARIOS')
+    .from('usuarios')
     .select(
       'id_usuario, supabase_auth_id, nombre, ap1, ap2, dni, email, telefono, rol, password, avatar_url, bio, valoracion, num_turnos, total_km, total_excursiones, fecha_registro, ultimo_acceso'
     )

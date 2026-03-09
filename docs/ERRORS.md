@@ -135,7 +135,53 @@
 
 ## Errores Fase 2 - Excursiones
 
-> (pendiente de registrar)
+### [FASE-2] Tabla 'USUARIOS' en mayúsculas en _layout.tsx
+- **Fecha:** 2026-03-04
+- **Archivo(s):** `app/_layout.tsx` línea 16
+- **Error:** El perfil del usuario quedaba `null` tras el login aunque la sesión fuera válida
+- **Causa:** `from('USUARIOS')` → PostgREST intenta acceder a `/rest/v1/USUARIOS`, que no existe (la tabla real es `usuarios`)
+- **Solución:** Cambiar a `from('usuarios')`
+- **Aprendizaje:** Este error ya estaba documentado en Fase 1. Revisar SIEMPRE todos los `from('...')` al inicio de cada fase. Nunca usar mayúsculas en nombres de tabla sin comillas.
+
+### [FASE-2] loading compartido entre fetchFeaturedExcursions y fetchUpcomingExcursions
+- **Fecha:** 2026-03-04
+- **Archivo(s):** `stores/excursionsStore.ts`, `app/(tabs)/index.tsx`
+- **Error:** El spinner del Home desaparecía antes de tiempo al lanzar ambos fetches en paralelo
+- **Causa:** Ambas funciones escribían al mismo flag `loading: boolean`. La primera en terminar ponía `loading: false` aunque la otra siguiera en curso
+- **Solución:** Flags separados `loadingFeatured` y `loadingUpcoming`
+- **Aprendizaje:** Cuando múltiples operaciones async comparten un flag de loading y se lanzan en paralelo, siempre usar flags independientes o un contador de operaciones pendientes
+
+### [FASE-2] currentExcursion no se limpiaba al navegar entre detalles
+- **Fecha:** 2026-03-04
+- **Archivo(s):** `stores/excursionsStore.ts`, `app/excursion/[id].tsx`
+- **Error:** Al navegar de excursion/1 a excursion/2 se veían brevemente los datos de la excursión anterior
+- **Causa:** `getExcursionById` no reseteaba `currentExcursion` a `null` antes de iniciar la carga
+- **Solución:** `set({ currentExcursion: null, loading: true, error: null })` al inicio de la acción
+- **Aprendizaje:** Siempre limpiar el estado previo antes de iniciar cualquier fetch de detalle
+
+### [FASE-2] Mensajes de error internos de Supabase/PostgreSQL expuestos al usuario
+- **Fecha:** 2026-03-04
+- **Archivo(s):** `stores/excursionsStore.ts`
+- **Error:** El usuario podía ver mensajes técnicos con nombres de tablas, columnas o políticas RLS
+- **Causa:** `set({ error: (error as Error).message })` guardaba el mensaje raw de Supabase
+- **Solución:** Función `getExcursionErrorMessage(error, context)` que loguea el error real y devuelve un mensaje genérico en español
+- **Aprendizaje:** En todos los stores, los mensajes de error del catch deben ser siempre genéricos y en español. El error real solo va a `console.error`
+
+### [FASE-2] JSBigFileString::fromPath - Could not open file (Android)
+- **Fecha:** 2026-03-04
+- **Archivo(s):** N/A (problema de entorno, no de código)
+- **Error:** Pantalla roja en Android con `JSBigFileString::fromPath - Could not open file`
+- **Causa:** El dispositivo Android no puede alcanzar el servidor Metro de Expo (redes distintas, aislamiento de clientes WiFi, etc.)
+- **Solución:** `npx expo start --tunnel` para enrutar a través de los servidores de Expo, o `adb reverse tcp:8081 tcp:8081` por USB
+- **Aprendizaje:** Este error no es de código. Siempre verificar que dispositivo y ordenador están en la misma red, o usar `--tunnel`
+
+### [FASE-2] TypeError: Network request failed (iOS Simulator)
+- **Fecha:** 2026-03-04
+- **Archivo(s):** N/A (problema de entorno/conectividad)
+- **Error:** `TypeError: Network request failed` al intentar hacer login desde el simulador iOS
+- **Causa:** El simulador iOS perdió acceso a red (común tras sleep/reinicio del Mac), o variables `.env` incorrectas
+- **Solución:** Verificar red del simulador en Safari, `npx expo start --clear`, verificar `.env`
+- **Aprendizaje:** Antes de diagnosticar código, verificar siempre conectividad básica del simulador
 
 ---
 
@@ -148,3 +194,7 @@
 | **Auth race condition** | Redirect antes de comprobar sesión | Flag `initializing` obligatorio |
 | **Idioma mezclado** | Funciones en español | Revisar nombres antes de commitear |
 | **Params sin validar** | Crash en rutas dinámicas | `parseInt` + `isNaN` obligatorio en [id] |
+| **Tabla en mayúsculas** | `from('USUARIOS')` en vez de `from('usuarios')` | Revisar todos los `from()` al inicio de cada fase |
+| **Loading compartido** | Un flag para múltiples fetches paralelos | Un flag de loading por operación independiente |
+| **Estado stale en detalle** | currentExcursion/currentBooking con datos viejos | Limpiar a `null` al inicio de cada `getById` |
+| **Error message raw** | Exponer mensajes de Supabase/PostgreSQL al usuario | Función de mapeo con mensaje genérico + `console.error` |
