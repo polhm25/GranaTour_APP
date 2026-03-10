@@ -129,7 +129,10 @@ export const useBookingsStore = create<BookingsState>((set, get) => ({
   // Esto evita overbooking por concurrencia.
   createBooking: async (data: NewBookingData) => {
     const user = useAuthStore.getState().user;
-    if (!user) return null;
+    if (!user) {
+      set({ error: 'Debes iniciar sesión para realizar una reserva' });
+      return null;
+    }
 
     set({ loadingCreate: true, error: null });
     try {

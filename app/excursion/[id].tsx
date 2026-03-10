@@ -49,10 +49,12 @@ export default function ExcursionDetailScreen() {
   );
 
   // ── Store de reservas ─────────────────────────────────────────────────────
-  const { loadingCreate, createBooking } = useBookingsStore(
+  const { loadingCreate, bookingError, createBooking, clearBookingError } = useBookingsStore(
     useShallow((state) => ({
       loadingCreate: state.loadingCreate,
+      bookingError: state.error,
       createBooking: state.createBooking,
+      clearBookingError: state.clearError,
     }))
   );
 
@@ -70,8 +72,9 @@ export default function ExcursionDetailScreen() {
   // ── Resetear personas al abrir el sheet ─── I-05: useCallback ───────────
   const openSheet = useCallback(() => {
     setNumPersonas(1);
+    clearBookingError(); // limpiar error previo al abrir
     setShowSheet(true);
-  }, []);
+  }, [clearBookingError]);
 
   // ── Confirmar reserva ─── I-05: useCallback ───────────────────────────────
   const handleConfirmBooking = useCallback(async () => {
@@ -454,6 +457,13 @@ export default function ExcursionDetailScreen() {
               </Text>
             </View>
           </View>
+
+          {/* Error de reserva */}
+          {bookingError ? (
+            <View className="mb-4 rounded-lg bg-red-50 px-4 py-3">
+              <Text className="text-sm text-red-600">{bookingError}</Text>
+            </View>
+          ) : null}
 
           {/* Botón confirmar */}
           <TouchableOpacity
