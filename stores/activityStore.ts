@@ -72,6 +72,10 @@ interface ActivityState {
   // Resumen pendiente de guardar o descartar (visible tras stopTracking)
   pendingSummary: ActivitySummary | null;
 
+  // IDs de fotos tomadas durante el tracking activo (aún sin id_actividad en DB)
+  // Al guardar la actividad, se actualiza su id_actividad en la tabla fotos (C-01)
+  pendingTrackingPhotoIds: number[];
+
   // ── Historial ──────────────────────────────────────────────────────────────
   activities: Actividad[];
   selectedActivity: Actividad | null;
@@ -85,6 +89,7 @@ interface ActivityState {
   resumeTracking: () => void;
   stopTracking: () => void;
   addGPSPoint: (point: PuntoGPS) => void;
+  addTrackingPhoto: (id_foto: number) => void; // Registra foto tomada durante tracking (C-01)
 
   // ── Acciones post-tracking ─────────────────────────────────────────────────
   saveActivity: (titulo?: string) => Promise<void>;
@@ -110,6 +115,7 @@ export const useActivityStore = create<ActivityState>((set, get) => ({
   currentSpeed: 0,
   elevationGain: 0,
   pendingSummary: null,
+  pendingTrackingPhotoIds: [],
 
   activities: [],
   selectedActivity: null,
@@ -148,6 +154,7 @@ export const useActivityStore = create<ActivityState>((set, get) => ({
       currentSpeed: 0,
       elevationGain: 0,
       pendingSummary: null,
+      pendingTrackingPhotoIds: [], // Limpiar fotos pendientes de un tracking anterior
       error: null,
     });
 
@@ -274,6 +281,15 @@ export const useActivityStore = create<ActivityState>((set, get) => ({
       });
   },
 
+  // ── addTrackingPhoto ────────────────────────────────────────────────────────
+  // Registra el id_foto de una foto tomada durante el tracking activo.
+  // Al guardar la actividad se vinculará con UPDATE (C-01).
+  addTrackingPhoto: (id_foto: number) => {
+    set((state) => ({
+      pendingTrackingPhotoIds: [...state.pendingTrackingPhotoIds, id_foto],
+    }));
+  },
+
   // ── addGPSPoint ────────────────────────────────────────────────────────────
   addGPSPoint: (point: PuntoGPS) => {
     const state = get();
@@ -339,19 +355,23 @@ export const useActivityStore = create<ActivityState>((set, get) => ({
         tituloTrimmed ||
         `Actividad ${new Date(summary.startTime).toLocaleDateString('es-ES')}`;
 
-      const { error } = await supabase.from('actividades').insert({
-        id_usuario: user.id_usuario,
-        id_excursion: summary.excursionId ?? null,
-        fecha_inicio: new Date(summary.startTime).toISOString(),
-        fecha_fin: new Date(summary.endTime).toISOString(),
-        distancia_km: Math.round(summary.distanceKm * 100) / 100,
-        duracion_minutos: summary.durationMinutes,
-        desnivel_positivo: Math.round(summary.elevationGain), // C-01: guardar desnivel
-        velocidad_media: Math.round(summary.averageSpeed * 100) / 100,
-        ruta_geojson: rutaGeojson,
-        titulo: tituloFinal,
-        estado: 'completada' as const,
-      });
+      const { data, error } = await supabase
+        .from('actividades')
+        .insert({
+          id_usuario: user.id_usuario,
+          id_excursion: summary.excursionId ?? null,
+          fecha_inicio: new Date(summary.startTime).toISOString(),
+          fecha_fin: new Date(summary.endTime).toISOString(),
+          distancia_km: Math.round(summary.distanceKm * 100) / 100,
+          duracion_minutos: summary.durationMinutes,
+          desnivel_positivo: Math.round(summary.elevationGain), // desnivel positivo acumulado
+          velocidad_media: Math.round(summary.averageSpeed * 100) / 100,
+          ruta_geojson: rutaGeojson,
+          titulo: tituloFinal,
+          estado: 'completada' as const,
+        })
+        .select('id_actividad')
+        .single();
 
       if (error) {
         console.error('[GranaTour] Error guardando actividad:', error);
@@ -359,9 +379,25 @@ export const useActivityStore = create<ActivityState>((set, get) => ({
         return;
       }
 
+      // Vincular fotos tomadas durante el tracking a la nueva actividad (C-01)
+      const pendingIds = get().pendingTrackingPhotoIds;
+      if (pendingIds.length > 0 && data) {
+        const newActivityId = (data as { id_actividad: number }).id_actividad;
+        const { error: photoUpdateError } = await supabase
+          .from('fotos')
+          .update({ id_actividad: newActivityId })
+          .in('id_foto', pendingIds);
+
+        if (photoUpdateError) {
+          // No es bloqueante: la actividad ya se guardó; solo logueamos el fallo
+          console.error('[GranaTour] Error vinculando fotos a la actividad:', photoUpdateError);
+        }
+      }
+
       // Limpiar estado tras guardar con éxito
       set({
         pendingSummary: null,
+        pendingTrackingPhotoIds: [],
         gpsPoints: [],
         currentDistance: 0,
         durationSeconds: 0,
@@ -382,8 +418,11 @@ export const useActivityStore = create<ActivityState>((set, get) => ({
 
   // ── discardActivity ────────────────────────────────────────────────────────
   discardActivity: () => {
+    // Nota: las fotos tomadas durante el tracking descartado quedan sin id_actividad.
+    // Son fotos válidas del usuario (pueden verse en su galería personal).
     set({
       pendingSummary: null,
+      pendingTrackingPhotoIds: [],
       gpsPoints: [],
       currentDistance: 0,
       durationSeconds: 0,
