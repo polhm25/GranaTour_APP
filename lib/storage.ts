@@ -19,7 +19,9 @@ export async function uploadPhoto(uri: string, userId: string): Promise<string> 
   const blob = await response.blob();
 
   // Construir el path único dentro del bucket
-  const path = `${userId}/${Date.now()}.jpg`;
+  // Se añade sufijo aleatorio para evitar colisión si se suben dos fotos en el mismo ms (I-04)
+  const suffix = Math.random().toString(36).slice(2, 8);
+  const path = `${userId}/${Date.now()}_${suffix}.jpg`;
 
   // Subir al bucket
   const { error: uploadError } = await supabase.storage
