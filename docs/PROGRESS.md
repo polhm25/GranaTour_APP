@@ -15,7 +15,7 @@
 | 3 | Sistema de reservas | ✅ COMPLETADA | 2026-03-09 |
 | 4 | Mapa interactivo | ✅ COMPLETADA | 2026-03-10 |
 | 5 | GPS Tracking | ✅ COMPLETADA | 2026-03-10 |
-| 6 | Fotos geolocalizadas | ⏳ Pendiente | - |
+| 6 | Fotos geolocalizadas | ✅ COMPLETADA | 2026-03-10 |
 | 7 | Reviews y valoraciones | ⏳ Pendiente | - |
 | 8 | Panel guía | ⏳ Pendiente | - |
 | 9 | Notificaciones push | ⏳ Pendiente | - |
@@ -285,6 +285,52 @@ components/ActivityCard.tsx  ← tarjeta historial reutilizable
 lib/utils.ts                 ← helpers formatTimer, formatDistanceLabel, etc.
 app/(tabs)/activity.tsx      ← UI completa tracking + historial
 app/_layout.tsx              ← import task para registro temprano
+```
+
+---
+
+---
+
+## FASE 6 - Fotos geolocalizadas ✅ COMPLETADA
+
+### Tareas completadas
+- [x] `npx expo install expo-image-picker expo-media-library` instalado
+- [x] `app.json` → permisos iOS (NSCameraUsageDescription, NSPhotoLibraryUsageDescription, etc.) y Android (CAMERA, READ_MEDIA_IMAGES)
+- [x] `lib/storage.ts` → helper `uploadPhoto(uri, userId)`: fetch blob → Supabase Storage → URL pública. Path con sufijo aleatorio para evitar colisiones
+- [x] `stores/photosStore.ts` → arrays separados por contexto (`excursionPhotos`, `myPhotos`), flags de loading independientes, límite PHOTOS_LIMIT=50 en queries
+- [x] `components/PhotoCapture.tsx` → botón reutilizable cámara/galería con Alert + permisos + compresión (quality:0.8) + callback onPhotoUploaded
+- [x] `stores/activityStore.ts` → `pendingTrackingPhotoIds`, `addTrackingPhoto`, UPDATE de fotos en `saveActivity`, INSERT devuelve `id_actividad`
+- [x] `app/(tabs)/activity.tsx` → botón PhotoCapture flotante durante tracking, geolocalización automática del último gpsPoint, feedback visual con Alert
+- [x] `app/excursion/[id].tsx` → sección "Fotos de la comunidad" con FlatList (scrollEnabled=false), lightbox Modal, PhotoCapture inline
+- [x] `app/(tabs)/profile.tsx` → galería "Mis fotos" en cuadrícula 3 columnas, lightbox con fecha y botón eliminar, PhotoCapture
+
+### Fix post-review
+- [x] C-01: `pendingTrackingPhotoIds` + UPDATE en saveActivity vincula fotos de tracking a la actividad
+- [x] C-02: arrays separados `excursionPhotos`/`myPhotos` eliminan race condition del store compartido
+- [x] C-03: FlatList con `scrollEnabled={false}` reemplaza `.map()` en ScrollView en excursion/[id].tsx
+- [x] I-01: `style?: StyleProp<ViewStyle>` en PhotoCapture (antes `object`)
+- [x] I-02: Acciones Zustand fuera de useShallow en profile.tsx y excursion/[id].tsx
+- [x] I-03: `.limit(PHOTOS_LIMIT)` en todas las queries de fotos
+- [x] I-04: sufijo aleatorio en nombre de archivo Storage: `${Date.now()}_${suffix}.jpg`
+- [x] I-05: Alert de confirmación tras subir foto durante tracking
+
+### Criterio de éxito
+- [x] Tomar foto durante tracking → geolocalizada → vinculada a actividad al guardar
+- [x] Foto aparece en galería de excursión (Fotos de la comunidad)
+- [x] Foto aparece en galería personal del perfil
+- [x] Eliminar foto desde el perfil (lightbox)
+- [x] Lightbox modal en excursion/[id].tsx para ver foto a pantalla completa
+
+### Fase 6 (completada)
+```
+lib/storage.ts               ← helper uploadPhoto con path único y URL pública
+stores/photosStore.ts        ← arrays separados por contexto, límites, delete con RLS
+stores/activityStore.ts      ← pendingTrackingPhotoIds, addTrackingPhoto, UPDATE al guardar
+components/PhotoCapture.tsx  ← botón cámara/galería reutilizable
+app/(tabs)/activity.tsx      ← botón flotante durante tracking con geolocalización
+app/(tabs)/profile.tsx       ← galería personal 3 columnas con lightbox
+app/excursion/[id].tsx       ← galería comunidad 2 columnas con FlatList + lightbox
+app.json                     ← permisos iOS/Android para cámara y galería
 ```
 
 ---

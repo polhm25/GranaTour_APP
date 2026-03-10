@@ -262,3 +262,8 @@
 | **Loading compartido** | Un flag para múltiples fetches paralelos | Un flag de loading por operación independiente |
 | **Estado stale en detalle** | currentExcursion/currentBooking con datos viejos | Limpiar a `null` al inicio de cada `getById` |
 | **Error message raw** | Exponer mensajes de Supabase/PostgreSQL al usuario | Función de mapeo con mensaje genérico + `console.error` |
+| **Store array compartido** | Un único `photos[]` para todas las pantallas causa race conditions | Usar arrays separados por contexto (`myPhotos`, `excursionPhotos`) con flags de loading independientes |
+| **Acciones en useShallow** | Incluir acciones Zustand en useShallow crea referencias inestables | Acciones siempre fuera de useShallow, como selectores individuales |
+| **Fotos tracking huérfanas** | Foto subida durante tracking sin `id_actividad` porque la actividad aún no existe en DB | Registrar `id_foto` en `pendingTrackingPhotoIds` y hacer UPDATE tras guardar la actividad |
+| **.map() en ScrollView** | Cientos de fotos renderizadas a la vez sin virtualización | Usar `FlatList` con `scrollEnabled={false}` para embeberse en ScrollView padre |
+| **Colisión timestamp Storage** | `Date.now()` puede repetirse en subidas rápidas, `upsert: false` causa error | Añadir sufijo aleatorio: `${Date.now()}_${Math.random().toString(36).slice(2,8)}` |
