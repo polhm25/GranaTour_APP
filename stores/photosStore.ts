@@ -1,10 +1,18 @@
 // Store de fotos geolocalizadas: subida, consulta y eliminación de fotos de actividades
+// Los arrays de fotos están separados por contexto para evitar race conditions entre pantallas (C-02)
 import { create } from 'zustand';
 
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
 import { uploadPhoto as uploadPhotoToStorage } from '@/lib/storage';
 import type { Foto } from '@/lib/types';
+
+// Campos seleccionados en todas las queries de fotos
+const FOTO_FIELDS =
+  'id_foto, id_usuario, id_actividad, id_excursion, url_storage, latitud, longitud, descripcion, fecha';
+
+// Límite de fotos por consulta para evitar cargar demasiadas a la vez (I-03)
+const PHOTOS_LIMIT = 50;
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -19,26 +27,33 @@ export interface UploadPhotoOptions {
 }
 
 interface PhotosState {
-  photos: Foto[];
-  loading: boolean;
+  // Arrays separados por contexto para evitar race conditions (C-02)
+  excursionPhotos: Foto[]; // Fotos de una excursión concreta
+  myPhotos: Foto[]; // Fotos personales del usuario autenticado
+
+  // Flags de carga separados por contexto
+  loadingExcursion: boolean;
+  loadingMy: boolean;
+
   uploading: boolean;
   error: string | null;
 
   // Acciones
   uploadPhoto: (options: UploadPhotoOptions) => Promise<Foto | null>;
-  fetchPhotosByActivity: (id_actividad: number) => Promise<void>;
   fetchPhotosByExcursion: (id_excursion: number) => Promise<void>;
   fetchMyPhotos: () => Promise<void>;
   deletePhoto: (id_foto: number, url_storage: string) => Promise<boolean>;
   clearError: () => void;
-  clearPhotos: () => void;
+  clearExcursionPhotos: () => void;
 }
 
 // ─── Store ────────────────────────────────────────────────────────────────────
 
 export const usePhotosStore = create<PhotosState>((set, get) => ({
-  photos: [],
-  loading: false,
+  excursionPhotos: [],
+  myPhotos: [],
+  loadingExcursion: false,
+  loadingMy: false,
   uploading: false,
   error: null,
 
@@ -69,9 +84,7 @@ export const usePhotosStore = create<PhotosState>((set, get) => ({
           descripcion: options.descripcion ?? null,
           fecha: new Date().toISOString(),
         })
-        .select(
-          'id_foto, id_usuario, id_actividad, id_excursion, url_storage, latitud, longitud, descripcion, fecha'
-        )
+        .select(FOTO_FIELDS)
         .single();
 
       if (insertError) {
@@ -82,11 +95,18 @@ export const usePhotosStore = create<PhotosState>((set, get) => ({
 
       const newPhoto = data as Foto;
 
-      // Añadir la nueva foto al inicio del array local (sin mutar el estado anterior)
-      set((state) => ({
-        photos: [newPhoto, ...state.photos],
-        uploading: false,
-      }));
+      // Añadir la nueva foto al contexto correspondiente (sin mutar el estado anterior)
+      if (options.id_excursion !== undefined) {
+        set((state) => ({
+          excursionPhotos: [newPhoto, ...state.excursionPhotos],
+          uploading: false,
+        }));
+      } else {
+        set((state) => ({
+          myPhotos: [newPhoto, ...state.myPhotos],
+          uploading: false,
+        }));
+      }
 
       return newPhoto;
     } catch (err) {
@@ -96,55 +116,28 @@ export const usePhotosStore = create<PhotosState>((set, get) => ({
     }
   },
 
-  // ── fetchPhotosByActivity ──────────────────────────────────────────────────
-  fetchPhotosByActivity: async (id_actividad: number): Promise<void> => {
-    set({ loading: true, error: null, photos: [] });
-
-    try {
-      const { data, error } = await supabase
-        .from('fotos')
-        .select(
-          'id_foto, id_usuario, id_actividad, id_excursion, url_storage, latitud, longitud, descripcion, fecha'
-        )
-        .eq('id_actividad', id_actividad)
-        .order('fecha', { ascending: false });
-
-      if (error) {
-        console.error('[GranaTour] fetchPhotosByActivity error:', error);
-        set({ error: 'No se pudieron cargar las fotos', loading: false });
-        return;
-      }
-
-      set({ photos: (data ?? []) as Foto[], loading: false });
-    } catch (err) {
-      console.error('[GranaTour] fetchPhotosByActivity catch:', err);
-      set({ error: 'Error de conexión al cargar las fotos', loading: false });
-    }
-  },
-
   // ── fetchPhotosByExcursion ─────────────────────────────────────────────────
   fetchPhotosByExcursion: async (id_excursion: number): Promise<void> => {
-    set({ loading: true, error: null, photos: [] });
+    set({ loadingExcursion: true, error: null, excursionPhotos: [] });
 
     try {
       const { data, error } = await supabase
         .from('fotos')
-        .select(
-          'id_foto, id_usuario, id_actividad, id_excursion, url_storage, latitud, longitud, descripcion, fecha'
-        )
+        .select(FOTO_FIELDS)
         .eq('id_excursion', id_excursion)
-        .order('fecha', { ascending: false });
+        .order('fecha', { ascending: false })
+        .limit(PHOTOS_LIMIT); // I-03: evitar cargar miles de fotos de golpe
 
       if (error) {
         console.error('[GranaTour] fetchPhotosByExcursion error:', error);
-        set({ error: 'No se pudieron cargar las fotos', loading: false });
+        set({ error: 'No se pudieron cargar las fotos', loadingExcursion: false });
         return;
       }
 
-      set({ photos: (data ?? []) as Foto[], loading: false });
+      set({ excursionPhotos: (data ?? []) as Foto[], loadingExcursion: false });
     } catch (err) {
       console.error('[GranaTour] fetchPhotosByExcursion catch:', err);
-      set({ error: 'Error de conexión al cargar las fotos', loading: false });
+      set({ error: 'Error de conexión al cargar las fotos', loadingExcursion: false });
     }
   },
 
@@ -156,27 +149,26 @@ export const usePhotosStore = create<PhotosState>((set, get) => ({
       return;
     }
 
-    set({ loading: true, error: null, photos: [] });
+    set({ loadingMy: true, error: null, myPhotos: [] });
 
     try {
       const { data, error } = await supabase
         .from('fotos')
-        .select(
-          'id_foto, id_usuario, id_actividad, id_excursion, url_storage, latitud, longitud, descripcion, fecha'
-        )
+        .select(FOTO_FIELDS)
         .eq('id_usuario', user.id_usuario)
-        .order('fecha', { ascending: false });
+        .order('fecha', { ascending: false })
+        .limit(PHOTOS_LIMIT); // I-03: evitar cargar miles de fotos de golpe
 
       if (error) {
         console.error('[GranaTour] fetchMyPhotos error:', error);
-        set({ error: 'No se pudieron cargar tus fotos', loading: false });
+        set({ error: 'No se pudieron cargar tus fotos', loadingMy: false });
         return;
       }
 
-      set({ photos: (data ?? []) as Foto[], loading: false });
+      set({ myPhotos: (data ?? []) as Foto[], loadingMy: false });
     } catch (err) {
       console.error('[GranaTour] fetchMyPhotos catch:', err);
-      set({ error: 'Error de conexión al cargar tus fotos', loading: false });
+      set({ error: 'Error de conexión al cargar tus fotos', loadingMy: false });
     }
   },
 
@@ -222,9 +214,10 @@ export const usePhotosStore = create<PhotosState>((set, get) => ({
         return false;
       }
 
-      // Actualizar el array local eliminando la foto borrada
+      // Actualizar ambos arrays locales eliminando la foto borrada (puede estar en cualquiera)
       set((state) => ({
-        photos: state.photos.filter((p) => p.id_foto !== id_foto),
+        excursionPhotos: state.excursionPhotos.filter((p) => p.id_foto !== id_foto),
+        myPhotos: state.myPhotos.filter((p) => p.id_foto !== id_foto),
       }));
 
       return true;
@@ -238,6 +231,6 @@ export const usePhotosStore = create<PhotosState>((set, get) => ({
   // ── clearError ─────────────────────────────────────────────────────────────
   clearError: () => set({ error: null }),
 
-  // ── clearPhotos ────────────────────────────────────────────────────────────
-  clearPhotos: () => set({ photos: [], error: null }),
+  // ── clearExcursionPhotos ────────────────────────────────────────────────────
+  clearExcursionPhotos: () => set({ excursionPhotos: [], error: null }),
 }));
