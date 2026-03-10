@@ -4,6 +4,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Dimensions,
   Image,
   Modal,
   Pressable,
@@ -18,10 +19,17 @@ import { useShallow } from 'zustand/react/shallow';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ExcursionMapView } from '@/components/MapView';
+import { PhotoCapture } from '@/components/PhotoCapture';
 import { COLORS } from '@/lib/constants';
 import { formatDate, formatDuration, formatPrice, getDifficultyColor } from '@/lib/utils';
 import { useExcursionsStore } from '@/stores/excursionsStore';
 import { useBookingsStore } from '@/stores/bookingsStore';
+import { usePhotosStore } from '@/stores/photosStore';
+import type { Foto } from '@/lib/types';
+
+// Ancho de columna para la cuadrícula de 2 columnas
+const SCREEN_WIDTH = Dimensions.get('window').width;
+const COMMUNITY_PHOTO_SIZE = (SCREEN_WIDTH - 32) / 2;
 
 // Etiquetas en español para cada nivel de dificultad
 const DIFFICULTY_LABELS: Record<string, string> = {
@@ -59,9 +67,22 @@ export default function ExcursionDetailScreen() {
     }))
   );
 
+  // ── Store de fotos ─────────────────────────────────────────────────────────
+  const { photos, loading: loadingPhotos, fetchPhotosByExcursion, clearPhotos } = usePhotosStore(
+    useShallow((state) => ({
+      photos: state.photos,
+      loading: state.loading,
+      fetchPhotosByExcursion: state.fetchPhotosByExcursion,
+      clearPhotos: state.clearPhotos,
+    }))
+  );
+
   // ── Estado del booking sheet ──────────────────────────────────────────────
   const [showSheet, setShowSheet] = useState(false);
   const [numPersonas, setNumPersonas] = useState(1);
+
+  // ── Estado del lightbox de fotos ──────────────────────────────────────────
+  const [selectedPhoto, setSelectedPhoto] = useState<Foto | null>(null);
 
   // ── Carga al montar ─── I-06: getExcursionById incluido en deps ──────────
   useEffect(() => {
@@ -69,6 +90,23 @@ export default function ExcursionDetailScreen() {
       getExcursionById(excursionId);
     }
   }, [excursionId, getExcursionById]);
+
+  // ── Cargar fotos de la excursión ──────────────────────────────────────────
+  useEffect(() => {
+    if (!isNaN(excursionId)) {
+      fetchPhotosByExcursion(excursionId);
+    }
+    return () => clearPhotos();
+  }, [excursionId, fetchPhotosByExcursion, clearPhotos]);
+
+  // ── Callback tras subir foto en la galería ─────────────────────────────────
+  const handlePhotoUploaded = useCallback(
+    (_foto: Foto) => {
+      // Recargar fotos de la excursión para que aparezca la nueva
+      fetchPhotosByExcursion(excursionId);
+    },
+    [excursionId, fetchPhotosByExcursion]
+  );
 
   // ── Resetear personas al abrir el sheet ─── I-05: useCallback ───────────
   const openSheet = useCallback(() => {
@@ -345,6 +383,48 @@ export default function ExcursionDetailScreen() {
           </>
         ) : null}
 
+        {/* ── 6. Fotos de la comunidad ──────────────────────────────────── */}
+        <View className="bg-neutral-200 mx-4" style={styles.separator} />
+        <View className="py-5">
+          <View className="flex-row items-center justify-between px-4 mb-3">
+            <Text className="text-neutral-800 font-bold" style={styles.sectionTitle}>
+              Fotos de la comunidad
+            </Text>
+            <PhotoCapture
+              onPhotoUploaded={handlePhotoUploaded}
+              id_excursion={excursionId}
+            />
+          </View>
+
+          {loadingPhotos ? (
+            <ActivityIndicator color={COLORS.primary[500]} style={{ marginTop: 8 }} />
+          ) : photos.length === 0 ? (
+            <View className="items-center py-6 px-8">
+              <Text className="text-4xl mb-2">📸</Text>
+              <Text className="text-neutral-500 text-sm text-center">
+                Sé el primero en compartir una foto de esta excursión
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.photoGrid}>
+              {photos.map((foto) => (
+                <TouchableOpacity
+                  key={foto.id_foto}
+                  style={styles.photoGridItem}
+                  onPress={() => setSelectedPhoto(foto)}
+                  activeOpacity={0.85}
+                >
+                  <Image
+                    source={{ uri: foto.url_storage }}
+                    style={styles.photoGridImage}
+                    resizeMode="cover"
+                  />
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+        </View>
+
         <View style={styles.bottomSpacer} />
       </ScrollView>
 
@@ -490,6 +570,24 @@ export default function ExcursionDetailScreen() {
             </Text>
           </TouchableOpacity>
         </View>
+      </Modal>
+
+      {/* ── Lightbox de fotos de la comunidad ─────────────────────────── */}
+      <Modal
+        visible={selectedPhoto !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSelectedPhoto(null)}
+      >
+        <Pressable style={styles.lightboxOverlay} onPress={() => setSelectedPhoto(null)}>
+          {selectedPhoto && (
+            <Image
+              source={{ uri: selectedPhoto.url_storage }}
+              style={styles.lightboxImage}
+              resizeMode="contain"
+            />
+          )}
+        </Pressable>
       </Modal>
     </View>
   );
@@ -695,5 +793,33 @@ const styles = StyleSheet.create({
   },
   cancelText: {
     fontSize: 14,
+  },
+  // ── Galería de fotos de la comunidad ─────────────────────────────────────
+  photoGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: 12,
+    gap: 4,
+  },
+  photoGridItem: {
+    width: COMMUNITY_PHOTO_SIZE,
+    height: COMMUNITY_PHOTO_SIZE,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  photoGridImage: {
+    width: '100%',
+    height: '100%',
+  },
+  // ── Lightbox ──────────────────────────────────────────────────────────────
+  lightboxOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.92)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  lightboxImage: {
+    width: '100%',
+    height: '80%',
   },
 });
