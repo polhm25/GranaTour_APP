@@ -5,6 +5,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Dimensions,
+  FlatList,
   Image,
   Modal,
   Pressable,
@@ -67,15 +68,17 @@ export default function ExcursionDetailScreen() {
     }))
   );
 
-  // ── Store de fotos ─────────────────────────────────────────────────────────
-  const { photos, loading: loadingPhotos, fetchPhotosByExcursion, clearPhotos } = usePhotosStore(
+  // ── Store de fotos — array dedicado para excursión (C-02) ─────────────────
+  const { photos, loadingPhotos } = usePhotosStore(
     useShallow((state) => ({
-      photos: state.photos,
-      loading: state.loading,
-      fetchPhotosByExcursion: state.fetchPhotosByExcursion,
-      clearPhotos: state.clearPhotos,
+      photos: state.excursionPhotos,
+      loadingPhotos: state.loadingExcursion,
     }))
   );
+
+  // Acciones con referencias estables — fuera de useShallow (I-02)
+  const fetchPhotosByExcursion = usePhotosStore((state) => state.fetchPhotosByExcursion);
+  const clearExcursionPhotos = usePhotosStore((state) => state.clearExcursionPhotos);
 
   // ── Estado del booking sheet ──────────────────────────────────────────────
   const [showSheet, setShowSheet] = useState(false);
@@ -96,8 +99,8 @@ export default function ExcursionDetailScreen() {
     if (!isNaN(excursionId)) {
       fetchPhotosByExcursion(excursionId);
     }
-    return () => clearPhotos();
-  }, [excursionId, fetchPhotosByExcursion, clearPhotos]);
+    return () => clearExcursionPhotos();
+  }, [excursionId, fetchPhotosByExcursion, clearExcursionPhotos]);
 
   // ── Callback tras subir foto en la galería ─────────────────────────────────
   const handlePhotoUploaded = useCallback(
@@ -406,22 +409,28 @@ export default function ExcursionDetailScreen() {
               </Text>
             </View>
           ) : (
-            <View style={styles.photoGrid}>
-              {photos.map((foto) => (
+            // FlatList con scrollEnabled=false para embeberse en el ScrollView padre (C-03)
+            <FlatList
+              data={photos}
+              keyExtractor={(item) => String(item.id_foto)}
+              numColumns={2}
+              scrollEnabled={false}
+              contentContainerStyle={styles.photoGridContainer}
+              columnWrapperStyle={styles.photoGridRow}
+              renderItem={({ item }) => (
                 <TouchableOpacity
-                  key={foto.id_foto}
                   style={styles.photoGridItem}
-                  onPress={() => setSelectedPhoto(foto)}
+                  onPress={() => setSelectedPhoto(item)}
                   activeOpacity={0.85}
                 >
                   <Image
-                    source={{ uri: foto.url_storage }}
+                    source={{ uri: item.url_storage }}
                     style={styles.photoGridImage}
                     resizeMode="cover"
                   />
                 </TouchableOpacity>
-              ))}
-            </View>
+              )}
+            />
           )}
         </View>
 
@@ -794,12 +803,14 @@ const styles = StyleSheet.create({
   cancelText: {
     fontSize: 14,
   },
-  // ── Galería de fotos de la comunidad ─────────────────────────────────────
-  photoGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+  // ── Galería de fotos de la comunidad (FlatList con scrollEnabled=false) ──
+  photoGridContainer: {
     paddingHorizontal: 12,
+    paddingBottom: 4,
+  },
+  photoGridRow: {
     gap: 4,
+    marginBottom: 4,
   },
   photoGridItem: {
     width: COMMUNITY_PHOTO_SIZE,

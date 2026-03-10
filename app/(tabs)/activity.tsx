@@ -79,6 +79,7 @@ export default function ActivityScreen() {
   const discardActivity = useActivityStore((state) => state.discardActivity);
   const fetchActivities = useActivityStore((state) => state.fetchActivities);
   const clearError = useActivityStore((state) => state.clearError);
+  const addTrackingPhoto = useActivityStore((state) => state.addTrackingPhoto);
 
   // Título editable en el modal de guardado
   const [titulo, setTitulo] = useState('');
@@ -159,13 +160,16 @@ export default function ActivityScreen() {
     );
   }, [discardActivity]);
 
-  // Callback al subir una foto durante el tracking.
-  // La actividad aún no está guardada en DB, así que solo registramos feedback visual.
-  // La asociación definitiva a la actividad se hace al guardar la actividad.
-  const handlePhotoUploaded = useCallback((_foto: Foto) => {
-    // La foto queda en el store de fotos; la asociación a la actividad se gestiona
-    // desde la pantalla de detalle de actividad una vez guardada.
-  }, []);
+  // Callback al subir una foto durante el tracking (C-01, I-05).
+  // Registra el id_foto para que saveActivity pueda vincularla a la actividad con UPDATE.
+  // También muestra feedback visual al usuario.
+  const handlePhotoUploaded = useCallback(
+    (foto: Foto) => {
+      addTrackingPhoto(foto.id_foto);
+      Alert.alert('¡Foto guardada!', 'La foto se ha subido correctamente y quedará asociada a esta actividad al guardarla.');
+    },
+    [addTrackingPhoto]
+  );
 
   // Último punto GPS para geolocalizar la foto
   const lastGpsPoint = gpsPoints.length > 0 ? gpsPoints[gpsPoints.length - 1] : null;

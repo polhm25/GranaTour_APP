@@ -6,6 +6,8 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
+  type StyleProp,
+  type ViewStyle,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as MediaLibrary from 'expo-media-library';
@@ -27,8 +29,8 @@ interface PhotoCaptureProps {
   latitud?: number;
   /** Longitud GPS para geolocalizar la foto automáticamente */
   longitud?: number;
-  /** Estilos adicionales para el contenedor del botón (StyleSheet style) */
-  style?: object;
+  /** Estilos adicionales para el contenedor del botón */
+  style?: StyleProp<ViewStyle>;
 }
 
 // ─── Componente ───────────────────────────────────────────────────────────────

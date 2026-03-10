@@ -30,19 +30,20 @@ const PHOTO_SIZE = (SCREEN_WIDTH - 4) / 3; // 3 columnas con 2px de gap entre el
 export default function ProfileScreen() {
   const { user } = useAuth();
 
-  // Store de fotos
-  const { photos, loading, uploading, error, fetchMyPhotos, deletePhoto, clearError } =
-    usePhotosStore(
-      useShallow((state) => ({
-        photos: state.photos,
-        loading: state.loading,
-        uploading: state.uploading,
-        error: state.error,
-        fetchMyPhotos: state.fetchMyPhotos,
-        deletePhoto: state.deletePhoto,
-        clearError: state.clearError,
-      }))
-    );
+  // Store de fotos — estado separado por contexto (C-02)
+  const { photos, loading, uploading, error } = usePhotosStore(
+    useShallow((state) => ({
+      photos: state.myPhotos,
+      loading: state.loadingMy,
+      uploading: state.uploading,
+      error: state.error,
+    }))
+  );
+
+  // Acciones con referencias estables — fuera de useShallow (I-02)
+  const fetchMyPhotos = usePhotosStore((state) => state.fetchMyPhotos);
+  const deletePhoto = usePhotosStore((state) => state.deletePhoto);
+  const clearError = usePhotosStore((state) => state.clearError);
 
   // Foto seleccionada para el lightbox
   const [selectedPhoto, setSelectedPhoto] = useState<Foto | null>(null);
