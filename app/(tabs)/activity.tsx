@@ -17,8 +17,10 @@ import { useShallow } from 'zustand/react/shallow';
 
 import { useActivityStore } from '@/stores/activityStore';
 import { ActivityCard } from '@/components/ActivityCard';
+import { PhotoCapture } from '@/components/PhotoCapture';
 import { COLORS } from '@/lib/constants';
 import { formatDistanceLabel, formatSpeedLabel, formatTimer } from '@/lib/utils';
+import type { Foto } from '@/lib/types';
 
 // ─── Región inicial centrada en Granada ───────────────────────────────────────
 
@@ -157,6 +159,17 @@ export default function ActivityScreen() {
     );
   }, [discardActivity]);
 
+  // Callback al subir una foto durante el tracking.
+  // La actividad aún no está guardada en DB, así que solo registramos feedback visual.
+  // La asociación definitiva a la actividad se hace al guardar la actividad.
+  const handlePhotoUploaded = useCallback((_foto: Foto) => {
+    // La foto queda en el store de fotos; la asociación a la actividad se gestiona
+    // desde la pantalla de detalle de actividad una vez guardada.
+  }, []);
+
+  // Último punto GPS para geolocalizar la foto
+  const lastGpsPoint = gpsPoints.length > 0 ? gpsPoints[gpsPoints.length - 1] : null;
+
   // ── Estado: tracking activo ────────────────────────────────────────────────
 
   if (trackingActive) {
@@ -208,6 +221,15 @@ export default function ActivityScreen() {
               <Text style={styles.pausedBadge}>PAUSADO</Text>
             </View>
           )}
+        </View>
+
+        {/* Botón flotante de cámara: esquina inferior derecha, encima de los controles */}
+        <View style={styles.cameraButtonContainer}>
+          <PhotoCapture
+            onPhotoUploaded={handlePhotoUploaded}
+            latitud={lastGpsPoint?.latitud}
+            longitud={lastGpsPoint?.longitud}
+          />
         </View>
 
         {/* Controles en la parte inferior */}
@@ -448,6 +470,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 3,
     borderRadius: 8,
+  },
+  // Botón flotante de cámara: posición absoluta entre el panel de stats y los controles
+  cameraButtonContainer: {
+    position: 'absolute',
+    bottom: 110,
+    right: 16,
   },
   controlsPanel: {
     position: 'absolute',
