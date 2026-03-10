@@ -1,5 +1,8 @@
 // Root layout: providers globales y listener de sesión de Supabase
 import '../global.css';
+// Importar la tarea de background GPS para que quede registrada al arrancar la app
+// (requisito de expo-task-manager: defineTask debe ejecutarse en el nivel de módulo)
+import '@/tasks/backgroundLocation';
 
 import { useEffect } from 'react';
 import { Stack } from 'expo-router';
