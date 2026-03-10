@@ -17,6 +17,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useShallow } from 'zustand/react/shallow';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { ExcursionMapView } from '@/components/MapView';
 import { COLORS } from '@/lib/constants';
 import { formatDate, formatDuration, formatPrice, getDifficultyColor } from '@/lib/utils';
 import { useExcursionsStore } from '@/stores/excursionsStore';
@@ -321,28 +322,25 @@ export default function ExcursionDetailScreen() {
           </>
         ) : null}
 
-        {/* ── 5. Punto de inicio (coordenadas) ─────────────────────────────── */}
+        {/* ── 5. Punto de inicio en mapa ────────────────────────────────────── */}
         {latitud !== null && longitud !== null ? (
           <>
             <View className="bg-neutral-200 mx-4" style={styles.separator} />
-            <View className="px-4 py-5">
-              <Text className="text-neutral-800 font-bold mb-3" style={styles.sectionTitle}>
+            <View className="py-5">
+              <Text
+                className="text-neutral-800 font-bold mb-3 px-4"
+                style={styles.sectionTitle}
+              >
                 Punto de inicio
               </Text>
-              <View className="bg-neutral-100 rounded-xl p-4">
-                <Text className="text-neutral-700 font-semibold mb-1" style={styles.coordTitle}>
-                  📍 Punto de inicio
-                </Text>
-                <Text className="text-neutral-500" style={styles.coordText}>
-                  Latitud: {latitud.toFixed(6)}
-                </Text>
-                <Text className="text-neutral-500" style={styles.coordText}>
-                  Longitud: {longitud.toFixed(6)}
-                </Text>
-                <Text className="text-neutral-400 mt-2" style={styles.coordNote}>
-                  Mapa completo disponible en Fase 4
-                </Text>
-              </View>
+              {/* Mapa mini no interactivo centrado en el punto de inicio */}
+              <ExcursionMapView
+                excursions={[currentExcursion]}
+                onMarkerPress={() => {}}
+                selectedId={excursionId}
+                interactive={false}
+                style={styles.miniMap}
+              />
             </View>
           </>
         ) : null}
@@ -584,17 +582,9 @@ const styles = StyleSheet.create({
   guideRating: {
     fontSize: 13,
   },
-  // ── Coordenadas ──────────────────────────────────────────────────────────
-  coordTitle: {
-    fontSize: 14,
-  },
-  coordText: {
-    fontSize: 12,
-    marginTop: 2,
-  },
-  coordNote: {
-    fontSize: 11,
-    fontStyle: 'italic',
+  // ── Mapa mini en detalle de excursión ────────────────────────────────────
+  miniMap: {
+    height: 200,
   },
   // ── Botón reservar ───────────────────────────────────────────────────────
   bottomSpacer: {

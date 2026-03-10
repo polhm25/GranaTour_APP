@@ -19,6 +19,26 @@
 
 ---
 
+## Errores Fase 4 - Mapa interactivo
+
+### [FASE-4] ruta_geojson no incluido en EXCURSION_FIELDS
+- **Fecha:** 2026-03-10
+- **Archivo(s):** `stores/excursionsStore.ts`
+- **Error:** Las polylines nunca se dibujaban (bug silencioso, sin crash)
+- **Causa:** Al crear MapView.tsx que consume `ruta_geojson`, se olvidó añadir el campo a la constante `EXCURSION_FIELDS` que construye el SELECT de Supabase
+- **Solución:** Añadir `'ruta_geojson'` al array `EXCURSION_FIELDS`
+- **Aprendizaje:** Al añadir un campo nuevo a la UI, SIEMPRE verificar que esté en la query/SELECT de Supabase. Revisar `EXCURSION_FIELDS` al inicio de cada fase que amplíe los datos usados
+
+### [FASE-4] TypeScript no narrowea dentro de .map() tras .filter()
+- **Fecha:** 2026-03-10
+- **Archivo(s):** `components/MapView.tsx`
+- **Error:** TypeScript requería casteo `as number` para `latitud`/`longitud` tras filtrar con `!== null`
+- **Causa:** TypeScript no propaga el narrowing de un `.filter()` al `.map()` posterior sin type predicate
+- **Solución:** Usar type predicate explícito `(e): e is Type & { latitud: number; longitud: number } => ...`
+- **Aprendizaje:** Para filtros que narrowean tipos nullable, usar type predicates en lugar de casteos `as`
+
+---
+
 ## Errores Fase 0 - Setup inicial
 
 ### [FASE-0] utils/supabase.ts duplicado con lib/supabase.ts
@@ -182,6 +202,50 @@
 - **Causa:** El simulador iOS perdió acceso a red (común tras sleep/reinicio del Mac), o variables `.env` incorrectas
 - **Solución:** Verificar red del simulador en Safari, `npx expo start --clear`, verificar `.env`
 - **Aprendizaje:** Antes de diagnosticar código, verificar siempre conectividad básica del simulador
+
+---
+
+## Errores Fase 3 - Sistema de reservas
+
+### [FASE-3] Race condition en createBooking: overbooking posible
+- **Fecha:** 2026-03-10
+- **Archivo(s):** `stores/bookingsStore.ts`
+- **Error:** Dos usuarios podían reservar la última plaza simultáneamente: INSERT primero, RPC después. Si el RPC fallaba la reserva quedaba creada sin decrementar plazas.
+- **Causa:** Flujo en dos pasos no atómico. Además el error del RPC solo se logueaba en `__DEV__`.
+- **Solución:** RPC `crear_reserva_atomica` en PostgreSQL que hace SELECT FOR UPDATE + decremento + INSERT en una sola transacción. Error siempre logueado (no solo __DEV__).
+- **Aprendizaje:** Cualquier operación que modifique varias tablas en Supabase debe hacerse con una función RPC de PostgreSQL para garantizar atomicidad.
+
+### [FASE-3] getBookingById y cancelBooking sin filtro id_usuario
+- **Fecha:** 2026-03-10
+- **Archivo(s):** `stores/bookingsStore.ts`
+- **Error:** Las queries solo filtraban por id_reserva, dependiendo 100% de RLS. Si RLS falla, cualquier usuario puede ver o cancelar reservas de otros.
+- **Causa:** Falta de defensa en profundidad en el cliente.
+- **Solución:** Añadir `.eq('id_usuario', user.id_usuario)` a ambas queries cuando el usuario está disponible.
+- **Aprendizaje:** Nunca depender solo de RLS para el ownership. Filtrar siempre por id_usuario en el cliente también.
+
+### [FASE-3] Tab "Historial" mostraba las mismas reservas que "Próximas"
+- **Fecha:** 2026-03-10
+- **Archivo(s):** `app/(tabs)/bookings.tsx`
+- **Error:** Historial filtraba solo por `estado === 'confirmada'`, igual que una parte de Próximas. Reservas futuras confirmadas aparecían en los dos tabs.
+- **Causa:** Falta de filtro por fecha de excursión.
+- **Solución:** Filtro combinado: Próximas = `(pendiente|confirmada) AND fecha >= hoy`; Historial = `NOT cancelada AND fecha < hoy`; Canceladas = `cancelada`.
+- **Aprendizaje:** Los tabs temporales siempre necesitan filtrar por fecha además de estado.
+
+### [FASE-3] Modal de cancelación se cerraba al tocar dentro del contenido
+- **Fecha:** 2026-03-10
+- **Archivo(s):** `app/booking/[id].tsx`
+- **Error:** El `Pressable` del overlay envolvía el box del modal. Un toque en cualquier botón del box propagaba al overlay y cerraba el modal.
+- **Causa:** Anidamiento incorrecto: box dentro del Pressable del overlay.
+- **Solución:** Separar overlay (Pressable absoluto) y box (View hermana) dentro de un View contenedor. El box absorbe los toques sin propagarlos.
+- **Aprendizaje:** En React Native, para un modal con overlay clicable, usar `StyleSheet.absoluteFill` en el Pressable del overlay y el box como hermano, no hijo.
+
+### [FASE-3] Error silencioso cuando createBooking se llama sin usuario autenticado
+- **Fecha:** 2026-03-10
+- **Archivo(s):** `stores/bookingsStore.ts`, `app/excursion/[id].tsx`
+- **Error:** Con Dev Bypass (sin usuario real en el store), pulsar "Confirmar reserva" no hacía nada visible.
+- **Causa:** `createBooking` retornaba `null` sin setear `error` cuando `user === null`. Además el `error` del store no se mostraba en el sheet.
+- **Solución:** Set de error explícito en el store cuando no hay usuario. Añadir `bookingError` al selector del sheet y banner rojo en la UI.
+- **Aprendizaje:** Todo `return null` prematuro en un store debe ir acompañado de `set({ error: '...' })`. Los estados de error deben estar siempre visibles en la UI que los dispara.
 
 ---
 

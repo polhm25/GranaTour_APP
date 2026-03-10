@@ -44,6 +44,7 @@ const EXCURSION_FIELDS = [
   'id_guia',
   'latitud',
   'longitud',
+  'ruta_geojson',
   'imagen_url',
   'activa',
 ].join(', ');

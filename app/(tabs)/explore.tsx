@@ -1,7 +1,7 @@
 // Tab 2: Pantalla de exploración del catálogo de excursiones.
-// Incluye barra de búsqueda con debounce, filtros por sheet y FlatList de resultados.
+// Incluye toggle Lista/Mapa, barra de búsqueda con debounce, filtros y FlatList de resultados.
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -16,6 +16,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ExcursionCard } from '@/components/ExcursionCard';
+import { ExcursionMapView } from '@/components/MapView';
 import { FilterSheet } from '@/components/ui/FilterSheet';
 import { COLORS } from '@/lib/constants';
 import type { ExcursionConGuia } from '@/lib/types';
@@ -23,6 +24,8 @@ import { useExcursionsStore, type ExcursionFilters } from '@/stores/excursionsSt
 
 // Tiempo de debounce en ms para la búsqueda de texto
 const SEARCH_DEBOUNCE_MS = 300;
+
+type ViewMode = 'list' | 'map';
 
 export default function ExploreScreen() {
   const router = useRouter();
@@ -47,6 +50,8 @@ export default function ExploreScreen() {
   const [filterSheetVisible, setFilterSheetVisible] = useState(false);
   // Valor del TextInput (el store se actualiza con debounce)
   const [searchInputValue, setSearchInputValue] = useState('');
+  // Modo de visualización: lista o mapa
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
 
   // Ref para el timer de debounce
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -58,19 +63,31 @@ export default function ExploreScreen() {
     }
   }, []);
 
+  // ── Limpieza del timer de debounce al desmontar ───────────────────────────
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current !== null) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, []);
+
   // ── Búsqueda con debounce ─────────────────────────────────────────────────
-  function handleSearchChange(text: string) {
-    setSearchInputValue(text);
+  const handleSearchChange = useCallback(
+    (text: string) => {
+      setSearchInputValue(text);
 
-    // Cancela el timer anterior antes de crear uno nuevo
-    if (debounceTimerRef.current !== null) {
-      clearTimeout(debounceTimerRef.current);
-    }
+      // Cancela el timer anterior antes de crear uno nuevo
+      if (debounceTimerRef.current !== null) {
+        clearTimeout(debounceTimerRef.current);
+      }
 
-    debounceTimerRef.current = setTimeout(() => {
-      setSearch(text);
-    }, SEARCH_DEBOUNCE_MS);
-  }
+      debounceTimerRef.current = setTimeout(() => {
+        setSearch(text);
+      }, SEARCH_DEBOUNCE_MS);
+    },
+    [setSearch]
+  );
 
   // ── Filtros ───────────────────────────────────────────────────────────────
 
@@ -92,8 +109,20 @@ export default function ExploreScreen() {
   }
 
   // ── Lista filtrada ────────────────────────────────────────────────────────
-  // Se llama en cada render; getFilteredExcursions() es un getter síncrono del store.
-  const filteredExcursions = getFilteredExcursions();
+  // Memoizada para evitar recalcular en cada render ajeno a excursions/filtros/búsqueda
+  const filteredExcursions = useMemo(
+    () => getFilteredExcursions(),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [excursions, filters, getFilteredExcursions]
+  );
+
+  // ── Navegación a detalle ──────────────────────────────────────────────────
+  const handleMarkerPress = useCallback(
+    (id: number) => {
+      router.push(`/excursion/${id}`);
+    },
+    [router]
+  );
 
   // ── Render de cada ítem ───────────────────────────────────────────────────
   const renderItem = useCallback(
@@ -112,54 +141,60 @@ export default function ExploreScreen() {
   );
 
   // ── Elemento de cabecera de la lista (buscador + contador) ──────────────
-  // Se pasa como JSX a ListHeaderComponent para que haga scroll junto con la lista
-  const listHeader = (
-    <View className="pb-2 pt-3">
-      {/* Barra de búsqueda */}
-      <TextInput
-        value={searchInputValue}
-        onChangeText={handleSearchChange}
-        placeholder="Buscar excursiones..."
-        placeholderTextColor={COLORS.neutral[400]}
-        returnKeyType="search"
-        clearButtonMode="while-editing"
-        style={styles.searchInput}
-      />
+  // Memoizado para evitar recrear el JSX en renders que no afectan al header
+  const listHeader = useMemo(
+    () => (
+      <View className="pb-2 pt-3">
+        {/* Barra de búsqueda */}
+        <TextInput
+          value={searchInputValue}
+          onChangeText={handleSearchChange}
+          placeholder="Buscar excursiones..."
+          placeholderTextColor={COLORS.neutral[400]}
+          returnKeyType="search"
+          clearButtonMode="while-editing"
+          style={styles.searchInput}
+        />
 
-      {/* Contador de resultados */}
-      <Text className="text-neutral-500 mt-2" style={styles.resultCount}>
-        {filteredExcursions.length}{' '}
-        {filteredExcursions.length === 1 ? 'excursión encontrada' : 'excursiones encontradas'}
-      </Text>
-    </View>
+        {/* Contador de resultados */}
+        <Text className="text-neutral-500 mt-2" style={styles.resultCount}>
+          {filteredExcursions.length}{' '}
+          {filteredExcursions.length === 1 ? 'excursión encontrada' : 'excursiones encontradas'}
+        </Text>
+      </View>
+    ),
+    [searchInputValue, filteredExcursions.length, handleSearchChange]
   );
 
   // ── Elemento de estado vacío ──────────────────────────────────────────────
-  const emptyState = (
-    <View className="flex-1 items-center justify-center py-20 px-8">
-      <Text className="text-neutral-400 text-center mb-2" style={styles.emptyIcon}>
-        🔍
-      </Text>
-      <Text className="text-neutral-700 font-semibold text-center mb-1" style={styles.emptyTitle}>
-        No se encontraron excursiones
-      </Text>
-      <Text className="text-neutral-400 text-center mb-6" style={styles.emptySubtitle}>
-        Prueba a cambiar los filtros o el término de búsqueda
-      </Text>
-      {(activeFilterCount > 0 || searchInputValue.trim().length > 0) && (
-        <TouchableOpacity
-          onPress={() => {
-            clearFilters();
-            setSearchInputValue('');
-          }}
-          className="bg-primary-500 px-6 py-3 rounded-xl"
-        >
-          <Text className="text-white font-semibold" style={styles.clearButtonText}>
-            Limpiar filtros
-          </Text>
-        </TouchableOpacity>
-      )}
-    </View>
+  const emptyState = useMemo(
+    () => (
+      <View className="flex-1 items-center justify-center py-20 px-8">
+        <Text className="text-neutral-400 text-center mb-2" style={styles.emptyIcon}>
+          🔍
+        </Text>
+        <Text className="text-neutral-700 font-semibold text-center mb-1" style={styles.emptyTitle}>
+          No se encontraron excursiones
+        </Text>
+        <Text className="text-neutral-400 text-center mb-6" style={styles.emptySubtitle}>
+          Prueba a cambiar los filtros o el término de búsqueda
+        </Text>
+        {(activeFilterCount > 0 || searchInputValue.trim().length > 0) && (
+          <TouchableOpacity
+            onPress={() => {
+              clearFilters();
+              setSearchInputValue('');
+            }}
+            className="bg-primary-500 px-6 py-3 rounded-xl"
+          >
+            <Text className="text-white font-semibold" style={styles.clearButtonText}>
+              Limpiar filtros
+            </Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    ),
+    [activeFilterCount, searchInputValue, clearFilters]
   );
 
   // ── Estado de error ───────────────────────────────────────────────────────
@@ -200,23 +235,36 @@ export default function ExploreScreen() {
           Explorar
         </Text>
 
-        {/* Botón de filtros con badge de count activo */}
-        <TouchableOpacity
-          onPress={() => setFilterSheetVisible(true)}
-          style={styles.filterButton}
-          className="flex-row items-center"
-        >
-          <Text className="text-primary-600 font-semibold" style={styles.filterButtonText}>
-            ⚙ Filtros
-          </Text>
+        {/* Acciones del header: toggle vista + filtros */}
+        <View className="flex-row items-center">
+          {/* Botón de alternancia Lista / Mapa */}
+          <TouchableOpacity
+            onPress={() => setViewMode((m) => (m === 'list' ? 'map' : 'list'))}
+            style={styles.viewToggleButton}
+          >
+            <Text className="text-primary-600 font-semibold" style={styles.viewToggleText}>
+              {viewMode === 'list' ? '🗺 Mapa' : '☰ Lista'}
+            </Text>
+          </TouchableOpacity>
 
-          {/* Badge numérico sobre el botón */}
-          {activeFilterCount > 0 && (
-            <View style={styles.filterBadge}>
-              <Text style={styles.filterBadgeText}>{activeFilterCount}</Text>
-            </View>
-          )}
-        </TouchableOpacity>
+          {/* Botón de filtros con badge de count activo */}
+          <TouchableOpacity
+            onPress={() => setFilterSheetVisible(true)}
+            style={styles.filterButton}
+            className="flex-row items-center"
+          >
+            <Text className="text-primary-600 font-semibold" style={styles.filterButtonText}>
+              ⚙ Filtros
+            </Text>
+
+            {/* Badge numérico sobre el botón */}
+            {activeFilterCount > 0 && (
+              <View style={styles.filterBadge}>
+                <Text style={styles.filterBadgeText}>{activeFilterCount}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* ── Loading centrado ───────────────────────────────────────────── */}
@@ -227,6 +275,13 @@ export default function ExploreScreen() {
             Cargando excursiones...
           </Text>
         </View>
+      ) : viewMode === 'map' ? (
+        /* ── Vista de mapa ──────────────────────────────────────────── */
+        <ExcursionMapView
+          excursions={filteredExcursions}
+          onMarkerPress={handleMarkerPress}
+          style={styles.fullMap}
+        />
       ) : (
         /* ── FlatList principal ──────────────────────────────────────── */
         <FlatList
@@ -261,6 +316,14 @@ const styles = StyleSheet.create({
   },
   screenTitle: {
     fontSize: 22,
+  },
+  viewToggleButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    marginRight: 4,
+  },
+  viewToggleText: {
+    fontSize: 14,
   },
   filterButton: {
     position: 'relative',
@@ -304,6 +367,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 24,
     flexGrow: 1,
+  },
+  // Mapa a pantalla completa (ocupa todo el espacio bajo el header)
+  fullMap: {
+    flex: 1,
   },
   emptyIcon: {
     fontSize: 48,

@@ -1,7 +1,7 @@
 # PROGRESS.md - Estado del desarrollo GranaTour
 
 > Registro del progreso real por fases. Actualizar al completar cada tarea o fase.
-> Última actualización: 2026-03-03
+> Última actualización: 2026-03-10
 
 ---
 
@@ -13,7 +13,7 @@
 | 1 | Autenticación | ✅ COMPLETADA | 2026-02-27 |
 | 2 | Explorar excursiones | ✅ COMPLETADA | 2026-03-03 |
 | 3 | Sistema de reservas | ✅ COMPLETADA | 2026-03-09 |
-| 4 | Mapa interactivo | ⏳ Pendiente | - |
+| 4 | Mapa interactivo | ✅ COMPLETADA | 2026-03-10 |
 | 5 | GPS Tracking | ⏳ Pendiente | - |
 | 6 | Fotos geolocalizadas | ⏳ Pendiente | - |
 | 7 | Reviews y valoraciones | ⏳ Pendiente | - |
@@ -66,7 +66,7 @@
 
 ---
 
-## FASE 1 - Autenticación 🔄 EN CURSO
+## FASE 1 - Autenticación ✅ COMPLETADA
 
 ### Objetivo
 Login, registro y recuperación de contraseña con Supabase Auth.
@@ -173,6 +173,61 @@ app/(tabs)/explore.tsx       ← lista + búsqueda + filtros
 app/(tabs)/index.tsx         ← Home con destacadas y próximas
 app/excursion/[id].tsx       ← detalle completo
 app/_layout.tsx              ← fix tabla 'usuarios' (minúsculas)
+```
+
+### Fase 3 (completada)
+```
+stores/bookingsStore.ts      ← lógica completa, RPC atómico, flags separados
+app/(tabs)/bookings.tsx      ← 3 tabs filtrados por estado+fecha, useFocusEffect
+app/booking/[id].tsx         ← detalle + cancelación con modal
+app/excursion/[id].tsx       ← booking sheet integrado, error display
+```
+RPCs Supabase requeridos: `crear_reserva_atomica`, `decrementar_plazas`, `incrementar_plazas`
+
+---
+
+## FASE 4 - Mapa interactivo ✅ COMPLETADA
+
+### Tareas completadas
+- [x] `npx expo install react-native-maps` instalado
+- [x] `components/MapView.tsx` → componente `ExcursionMapView` reutilizable:
+  - Markers por excursión (solo las que tienen latitud/longitud)
+  - Callout al tocar marker: nombre_ruta, zona, precio, hint de navegación
+  - Polyline si la excursión tiene ruta_geojson (parseo robusto de GeoJSON LineString)
+  - Props: `excursions[]`, `onMarkerPress(id)`, `selectedId?`, `interactive?`, `style?`
+  - Type predicate en filter para evitar casteos `as number`
+  - Validación de coordenadas en parseGeoJsonLineString (filtra NaN y fuera de rango)
+- [x] `stores/excursionsStore.ts` → añadido `ruta_geojson` a EXCURSION_FIELDS (fix C-01)
+- [x] `app/(tabs)/explore.tsx` → Toggle Lista/Mapa en header, modo mapa con ExcursionMapView:
+  - useMemo para filteredExcursions, listHeader y emptyState
+  - useCallback para handleSearchChange (antes función simple)
+  - useEffect cleanup para el timer de debounce
+- [x] `app/excursion/[id].tsx` → mapa mini no interactivo (200px) reemplaza bloque coords estático
+
+### Fix post-review
+- [x] C-01: `ruta_geojson` añadido a EXCURSION_FIELDS en excursionsStore
+- [x] I-01: useMemo para filteredExcursions en explore.tsx
+- [x] I-02: useEffect cleanup para debounce timer
+- [x] I-03: parseGeoJsonLineString valida coordenadas (isNaN, rango lat/lon)
+- [x] I-04: Type predicate en filter reemplaza casteo `as number`
+- [x] I-05: handleSearchChange memoizado con useCallback
+- [x] I-06: listHeader y emptyState memoizados con useMemo
+
+### Criterio de éxito
+- [x] Mapa con markers de excursiones en pantalla Explorar
+- [x] Toggle Lista/Mapa funcional con filtros activos en ambos modos
+- [x] Tap en marker abre detalle de excursión (Callout con onPress)
+- [x] Polyline de ruta dibujada si ruta_geojson presente
+- [x] Mapa mini (200px) en detalle de excursión, no interactivo
+
+---
+
+### Fase 4 (completada)
+```
+components/MapView.tsx       ← ExcursionMapView reutilizable
+stores/excursionsStore.ts    ← ruta_geojson añadido a EXCURSION_FIELDS
+app/(tabs)/explore.tsx       ← toggle lista/mapa + optimizaciones useMemo/useCallback
+app/excursion/[id].tsx       ← mapa mini reemplaza bloque coordenadas estático
 ```
 
 ---
