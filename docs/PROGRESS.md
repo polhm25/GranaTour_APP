@@ -14,7 +14,7 @@
 | 2 | Explorar excursiones | ✅ COMPLETADA | 2026-03-03 |
 | 3 | Sistema de reservas | ✅ COMPLETADA | 2026-03-09 |
 | 4 | Mapa interactivo | ✅ COMPLETADA | 2026-03-10 |
-| 5 | GPS Tracking | ⏳ Pendiente | - |
+| 5 | GPS Tracking | ✅ COMPLETADA | 2026-03-10 |
 | 6 | Fotos geolocalizadas | ⏳ Pendiente | - |
 | 7 | Reviews y valoraciones | ⏳ Pendiente | - |
 | 8 | Panel guía | ⏳ Pendiente | - |
@@ -228,6 +228,63 @@ components/MapView.tsx       ← ExcursionMapView reutilizable
 stores/excursionsStore.ts    ← ruta_geojson añadido a EXCURSION_FIELDS
 app/(tabs)/explore.tsx       ← toggle lista/mapa + optimizaciones useMemo/useCallback
 app/excursion/[id].tsx       ← mapa mini reemplaza bloque coordenadas estático
+```
+
+---
+
+## FASE 5 - GPS Tracking ✅ COMPLETADA
+
+### Tareas completadas
+- [x] `npx expo install expo-location expo-task-manager` instalado
+- [x] `tasks/backgroundLocation.ts` → tarea TaskManager con require() dinámico para evitar circular deps
+- [x] `hooks/useLocation.ts` → permisos foreground + background, getCurrentPositionAsync, useCallback
+- [x] `stores/activityStore.ts` → tracking completo:
+  - `startTracking`: permisos, timer, background task + fallback watchPositionAsync, flag `startingTracking` (C-02)
+  - `pauseTracking` / `resumeTracking`: pausa el timer sin detenerlo
+  - `stopTracking`: genera `pendingSummary` con stats finales
+  - `addGPSPoint`: Haversine incremental + desnivel positivo acumulado + filtro saltos > 200m
+  - `saveActivity`: INSERT en `actividades` con desnivel, validación título (I-04)
+  - `discardActivity`: limpia estado
+  - `fetchActivities`: filtra `estado != 'descartada'` (I-08)
+  - `getActivityById`: con filtro `id_usuario`
+- [x] `components/ActivityCard.tsx` → tarjeta de historial extraída (I-03)
+- [x] `lib/utils.ts` → helpers: formatTimer, formatDistanceLabel, formatSpeedLabel, formatDateShort (I-05)
+- [x] `app/(tabs)/activity.tsx` → UI completa:
+  - Estado idle: botón iniciar + historial de actividades
+  - Estado tracking: mapa en tiempo real con Polyline + stats (tiempo, distancia, velocidad, desnivel)
+  - Botones Pausar/Reanudar y Detener con confirmación Alert
+  - Modal de resumen: título editable, stats, Guardar / Descartar
+  - Selectores separados para datos frecuentes vs estables (C-03, I-01)
+- [x] `app/_layout.tsx` → import `tasks/backgroundLocation` para registro temprano
+- [x] Code review completado y todos los CRÍTICOS e IMPORTANTES corregidos
+
+### Fix post-review
+- [x] C-01: cálculo de desnivel positivo acumulado en `addGPSPoint` + guardado en Supabase
+- [x] C-02: flag `startingTracking` previene doble inicio + spinner en botón
+- [x] C-03: `useEffect` del mapa reacciona a `gpsPoints.length` no al array completo
+- [x] I-01: selectores Zustand separados (tracking frecuente vs historial estable vs acciones)
+- [x] I-03: `ActivityCard` extraída a `components/ActivityCard.tsx`
+- [x] I-04: validación de longitud del título en el store
+- [x] I-05: helpers de formato movidos a `lib/utils.ts`
+- [x] I-07: `useCallback` en `useLocation` para `requestPermission` y `getLocation`
+- [x] I-08: `fetchActivities` filtra `.neq('estado', 'descartada')`
+- [x] S-05: import `ScrollView` eliminado
+
+### Criterio de éxito
+- [x] Iniciar tracking → ver polyline en vivo con stats (tiempo, distancia, velocidad, desnivel)
+- [x] Pausar / Reanudar sin perder datos
+- [x] Detener → modal de resumen → guardar en Supabase tabla `actividades`
+- [x] Actividad visible en historial de la tab Actividad
+
+### Fase 5 (completada)
+```
+tasks/backgroundLocation.ts  ← tarea background GPS con expo-task-manager
+hooks/useLocation.ts         ← permisos y getLocation con expo-location
+stores/activityStore.ts      ← tracking completo, Haversine, desnivel, save/discard
+components/ActivityCard.tsx  ← tarjeta historial reutilizable
+lib/utils.ts                 ← helpers formatTimer, formatDistanceLabel, etc.
+app/(tabs)/activity.tsx      ← UI completa tracking + historial
+app/_layout.tsx              ← import task para registro temprano
 ```
 
 ---
