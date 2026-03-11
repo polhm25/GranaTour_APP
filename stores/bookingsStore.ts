@@ -1,5 +1,6 @@
 // Store de reservas: reservas del usuario autenticado
 import { create } from 'zustand';
+import * as Notifications from 'expo-notifications';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
 import type { Reserva, ReservaConDetalles } from '@/lib/types';
@@ -153,6 +154,19 @@ export const useBookingsStore = create<BookingsState>((set, get) => ({
 
       // Refrescar la lista de reservas en background
       get().fetchBookings();
+
+      // Notificación local inmediata de confirmación de reserva
+      Notifications.scheduleNotificationAsync({
+        content: {
+          title: '¡Reserva realizada!',
+          body: 'Tu reserva ha sido registrada. Espera la confirmación del guía.',
+          sound: 'default',
+        },
+        trigger: null, // Inmediata
+      }).catch((err) => {
+        // No bloquear el flujo si las notificaciones no están disponibles
+        if (__DEV__) console.warn('[GranaTour] notificación local:', err);
+      });
 
       set({ loadingCreate: false });
       return newBooking as Reserva;

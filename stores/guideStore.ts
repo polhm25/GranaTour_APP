@@ -4,6 +4,10 @@ import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
 import type { Reserva, Usuario, DificultadExcursion, EstadoReserva } from '@/lib/types';
 
+// ─── URL de la Edge Function de notificaciones push ──────────────────────────
+const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
+const SEND_PUSH_URL = `${SUPABASE_URL}/functions/v1/send-push-notification`;
+
 // ─── Tipos públicos ────────────────────────────────────────────────────────────
 
 // Excursión asignada al guía con conteos de reservas por estado
@@ -217,6 +221,33 @@ export const useGuideStore = create<GuideState>((set, get) => ({
         if (rpcError) {
           console.error('[GranaTour] incrementar_plazas error:', rpcError);
         }
+      }
+
+      // Enviar notificación push al cliente si el estado cambia a confirmada o cancelada
+      // Obtenemos el id_usuario de la reserva desde la lista local
+      const booking = get().excursionBookings.find((b) => b.id_reserva === bookingId);
+      if (booking && (newStatus === 'confirmada' || newStatus === 'cancelada')) {
+        const excursion = get().guideExcursions.find((e) => e.id_excursion === excursionId);
+        const excursionNombre = excursion?.nombre_ruta ?? 'tu excursión';
+
+        // Llamada a la Edge Function en background (no bloquea la UI)
+        fetch(SEND_PUSH_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            // Autenticación con la anon key para la Edge Function (la función usa service role internamente)
+            'Authorization': `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? ''}`,
+          },
+          body: JSON.stringify({
+            id_usuario: booking.id_usuario,
+            booking_id: bookingId,
+            excursion_nombre: excursionNombre,
+            new_status: newStatus,
+          }),
+        }).catch((err) => {
+          // No bloquear el flujo si el envío de push falla
+          console.error('[GranaTour] guideStore: error enviando push al cliente:', err);
+        });
       }
 
       // Actualizar estado local sin recargar la lista completa
