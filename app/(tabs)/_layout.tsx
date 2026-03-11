@@ -88,7 +88,7 @@ export default function TabsLayout() {
         name="guide"
         options={{
           href: isGuide ? undefined : null,
-          title: 'Guía',
+          title: TAB_LABELS.guide,
           tabBarIcon: ({ focused, color, size }) => (
             <Ionicons
               name={focused ? 'briefcase' : 'briefcase-outline'}

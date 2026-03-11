@@ -81,4 +81,5 @@ export const TAB_LABELS = {
   activity: 'Actividad',
   bookings: 'Reservas',
   profile: 'Perfil',
+  guide: 'Guía', // Tab exclusiva para usuarios con rol 'guia'
 } as const;
