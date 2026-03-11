@@ -56,7 +56,7 @@ function calculateAverage(reviews: ReviewConUsuario[]): number | null {
 // Se llama de forma asíncrona (fire-and-forget) para no bloquear la UI.
 async function updateGuideRating(excursionId: number): Promise<void> {
   try {
-    // Obtener el guía de la excursión
+    // Paso 1: obtener el guía de la excursión
     const { data: excData } = await supabase
       .from('excursiones')
       .select('id_guia')
@@ -65,27 +65,31 @@ async function updateGuideRating(excursionId: number): Promise<void> {
 
     if (!excData?.id_guia) return;
 
-    // Calcular nueva media de todas las excursiones del guía
+    // Paso 2: obtener todas las excursiones del guía
+    const { data: excursionesData } = await supabase
+      .from('excursiones')
+      .select('id_excursion')
+      .eq('id_guia', excData.id_guia);
+
+    if (!excursionesData || excursionesData.length === 0) return;
+
+    const excursionIds = excursionesData.map((e) => e.id_excursion as number);
+
+    // Paso 3: obtener todas las reviews de esas excursiones
     const { data: reviewsData } = await supabase
       .from('reviews')
-      .select('puntuacion, excursiones!id_excursion(id_guia)')
-      .eq('excursiones.id_guia', excData.id_guia);
-
-    if (!reviewsData || reviewsData.length === 0) {
-      // Sin reviews: resetear valoración a null
-      await supabase
-        .from('usuarios')
-        .update({ valoracion: null })
-        .eq('id_usuario', excData.id_guia);
-      return;
-    }
+      .select('puntuacion')
+      .in('id_excursion', excursionIds);
 
     const media =
-      reviewsData.reduce((sum, r) => sum + r.puntuacion, 0) / reviewsData.length;
+      reviewsData && reviewsData.length > 0
+        ? reviewsData.reduce((sum: number, r) => sum + (r.puntuacion as number), 0) / reviewsData.length
+        : null;
 
+    // Paso 4: actualizar el campo valoracion del guía
     await supabase
       .from('usuarios')
-      .update({ valoracion: Math.round(media * 100) / 100 })
+      .update({ valoracion: media !== null ? Math.round(media * 100) / 100 : null })
       .eq('id_usuario', excData.id_guia);
   } catch (err) {
     console.error('[GranaTour] updateGuideRating error:', err);
