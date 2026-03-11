@@ -126,6 +126,8 @@ export interface PushToken {
 
 export interface ExcursionConGuia extends Excursion {
   guia?: Pick<Usuario, 'id_usuario' | 'nombre' | 'ap1' | 'avatar_url' | 'valoracion'>;
+  // Media de valoraciones calculada en el store a partir de las reviews (Fase 7)
+  valoracion_media?: number | null;
 }
 
 export interface ReservaConDetalles extends Reserva {

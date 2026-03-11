@@ -52,8 +52,22 @@ const EXCURSION_FIELDS = [
 // Campos del guía que se incluyen en el JOIN
 const GUIA_FIELDS = 'id_usuario, nombre, ap1, avatar_url, valoracion';
 
-// Select completo con JOIN al guía usando alias para coincidir con ExcursionConGuia
-const SELECT_CON_GUIA = `${EXCURSION_FIELDS}, guia:usuarios!id_guia(${GUIA_FIELDS})`;
+// Select completo con JOIN al guía y puntuaciones de reviews para calcular la media (Fase 7)
+const SELECT_CON_GUIA = `${EXCURSION_FIELDS}, guia:usuarios!id_guia(${GUIA_FIELDS}), reviews(puntuacion)`;
+
+// Calcula la media de valoraciones a partir del array de reviews de Supabase
+// y elimina el campo reviews del objeto resultante (no forma parte del tipo ExcursionConGuia)
+function computeValoracionMedia(
+  raw: ExcursionConGuia & { reviews?: { puntuacion: number }[] }
+): ExcursionConGuia {
+  const puntuaciones = raw.reviews ?? [];
+  const valoracion_media =
+    puntuaciones.length > 0
+      ? Math.round((puntuaciones.reduce((sum, r) => sum + r.puntuacion, 0) / puntuaciones.length) * 10) / 10
+      : null;
+  const { reviews: _reviews, ...rest } = raw;
+  return { ...rest, valoracion_media };
+}
 
 interface ExcursionsState {
   // Estado
@@ -111,7 +125,9 @@ export const useExcursionsStore = create<ExcursionsState>((set, get) => ({
 
       if (error) throw error;
 
-      set({ excursions: (data as unknown as ExcursionConGuia[]) ?? [] });
+      const excursions = ((data as unknown as (ExcursionConGuia & { reviews?: { puntuacion: number }[] })[]) ?? [])
+        .map(computeValoracionMedia);
+      set({ excursions });
     } catch (error) {
       set({ error: getExcursionErrorMessage(error, 'list') });
     } finally {
@@ -133,7 +149,7 @@ export const useExcursionsStore = create<ExcursionsState>((set, get) => ({
 
       if (error) throw error;
 
-      const excursion = data as unknown as ExcursionConGuia;
+      const excursion = computeValoracionMedia(data as unknown as ExcursionConGuia & { reviews?: { puntuacion: number }[] });
       set({ currentExcursion: excursion });
       return excursion;
     } catch (error) {
@@ -162,7 +178,8 @@ export const useExcursionsStore = create<ExcursionsState>((set, get) => ({
 
       if (error) throw error;
 
-      const excursions = (data as unknown as ExcursionConGuia[]) ?? [];
+      const excursions = ((data as unknown as (ExcursionConGuia & { reviews?: { puntuacion: number }[] })[]) ?? [])
+        .map(computeValoracionMedia);
 
       // Ordenar en cliente: guías con mayor valoración primero, sin valoración al final
       const sorted = [...excursions].sort((a, b) => {
@@ -200,7 +217,8 @@ export const useExcursionsStore = create<ExcursionsState>((set, get) => ({
 
       if (error) throw error;
 
-      const upcoming = (data as unknown as ExcursionConGuia[]) ?? [];
+      const upcoming = ((data as unknown as (ExcursionConGuia & { reviews?: { puntuacion: number }[] })[]) ?? [])
+        .map(computeValoracionMedia);
       set({ upcomingExcursions: upcoming });
       return upcoming;
     } catch (error) {
