@@ -275,6 +275,32 @@
 - **Solución:** Añadir parámetro `keepExisting?: boolean` a `fetchReviewsByExcursion`. Llamadas internas desde create/edit usan `keepExisting=true` para no limpiar la lista existente
 - **Aprendizaje:** Cuando un fetch se usa tanto para carga inicial (debe limpiar) como para refresh interno (no debe limpiar), parametrizar el comportamiento en lugar de duplicar la función
 
+## Errores Fase 8 - Panel guía
+
+### [FASE-8] Flag de loading compartido bloquea todas las tarjetas de reserva
+- **Fecha:** 2026-03-11
+- **Archivo(s):** `stores/guideStore.ts`, `app/guide-excursion/[id].tsx`
+- **Error:** `loadingUpdate: boolean` bloqueaba visualmente TODAS las tarjetas de reserva cuando se actualizaba UNA sola
+- **Causa:** Usar un único booleano de loading para múltiples operaciones independientes (patrón ya documentado como error recurrente)
+- **Solución:** Usar `updatingBookingId: number | null` — identifica exactamente qué reserva está actualizando. `BookingCard` recibe `isUpdating={updatingBookingId === item.id_reserva}`
+- **Aprendizaje:** Confirmación del patrón: un flag de loading por operación independiente. Para listas de items con acciones individuales, usar el ID del item como referencia en lugar de un booleano global
+
+### [FASE-8] setStartingLocal(false) no se ejecuta si startTracking lanza excepción
+- **Fecha:** 2026-03-11
+- **Archivo(s):** `app/guide-excursion/[id].tsx`
+- **Error:** Botón "Iniciar excursión" quedaba permanentemente en estado "Iniciando…" si `startTracking` fallaba
+- **Causa:** `startTracking().then(...).catch(...)` sin `.finally()` — si la promesa rechazaba, `setStartingLocal(false)` nunca se ejecutaba
+- **Solución:** Añadir `.finally(() => setStartingLocal(false))` para garantizar el reset del estado local independientemente del resultado
+- **Aprendizaje:** Para cualquier flag de loading local que se activa antes de una promesa, SIEMPRE usar `finally` para garantizar su reset
+
+### [FASE-8] Expo Router router.d.ts no incluye rutas nuevas hasta que se regenera
+- **Fecha:** 2026-03-11
+- **Archivo(s):** `.expo/types/router.d.ts`
+- **Error:** TypeScript error al usar `router.push('/guide-excursion/${id}')` — la ruta no estaba en el tipo generado
+- **Causa:** `.expo/types/router.d.ts` es generado por Expo Router al arrancar `npx expo start`. Si se añaden nuevas rutas sin arrancar el servidor, el archivo de tipos queda desactualizado.
+- **Solución:** Actualizar manualmente `.expo/types/router.d.ts` añadiendo las nuevas rutas en los tres lugares: `hrefInputParams`, `hrefOutputParams`, `href`
+- **Aprendizaje:** Tras añadir nuevas rutas a `app/`, el archivo `.expo/types/router.d.ts` se regenera automáticamente en el próximo `npx expo start`. Para verificar TypeScript sin arrancar el servidor, actualizar el archivo manualmente o usar `router.push({ pathname: '/ruta/[id]', params: { id } })` con el tipo correcto
+
 ## Patrones de error recurrentes
 
 | Patrón | Descripción | Prevención |
