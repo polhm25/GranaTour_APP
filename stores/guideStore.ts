@@ -231,22 +231,30 @@ export const useGuideStore = create<GuideState>((set, get) => ({
         const excursionNombre = excursion?.nombre_ruta ?? 'tu excursión';
 
         // Llamada a la Edge Function en background (no bloquea la UI)
-        fetch(SEND_PUSH_URL, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            // Autenticación con la anon key para la Edge Function (la función usa service role internamente)
-            'Authorization': `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? ''}`,
-          },
-          body: JSON.stringify({
-            id_usuario: booking.id_usuario,
-            booking_id: bookingId,
-            excursion_nombre: excursionNombre,
-            new_status: newStatus,
-          }),
+        // C-02: Usar el JWT del usuario autenticado (no la anon key pública)
+        // para que la Edge Function pueda verificar que el caller es un guía
+        supabase.auth.getSession().then(({ data: { session } }) => {
+          const accessToken = session?.access_token;
+          if (!accessToken) return;
+
+          fetch(SEND_PUSH_URL, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${accessToken}`,
+            },
+            body: JSON.stringify({
+              id_usuario: booking.id_usuario,
+              booking_id: bookingId,
+              excursion_nombre: excursionNombre,
+              new_status: newStatus,
+            }),
+          }).catch((err) => {
+            // No bloquear el flujo si el envío de push falla
+            console.error('[GranaTour] guideStore: error enviando push al cliente:', err);
+          });
         }).catch((err) => {
-          // No bloquear el flujo si el envío de push falla
-          console.error('[GranaTour] guideStore: error enviando push al cliente:', err);
+          console.error('[GranaTour] guideStore: error obteniendo sesión para push:', err);
         });
       }
 

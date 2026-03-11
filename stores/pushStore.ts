@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
+import Constants from 'expo-constants';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
 import type { PlataformaPush } from '@/lib/types';
@@ -77,7 +78,13 @@ export const usePushStore = create<PushState>((set, get) => ({
       set({ permissionGranted: true });
 
       // Obtener el Expo Push Token (formato: ExponentPushToken[xxxxxx])
-      const tokenResponse = await Notifications.getExpoPushTokenAsync();
+      // I-02: projectId es obligatorio en builds EAS (producción); sin él falla fuera de Expo Go
+      const projectId =
+        Constants.expoConfig?.extra?.eas?.projectId ??
+        Constants.easConfig?.projectId;
+      const tokenResponse = await Notifications.getExpoPushTokenAsync(
+        projectId ? { projectId } : undefined
+      );
       const token = tokenResponse.data;
 
       // Determinar plataforma

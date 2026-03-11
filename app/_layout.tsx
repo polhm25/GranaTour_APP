@@ -8,6 +8,7 @@ import { useEffect, useRef } from 'react';
 import { Stack } from 'expo-router';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as Notifications from 'expo-notifications';
+import type { AuthChangeEvent } from '@supabase/supabase-js';
 
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
@@ -49,23 +50,27 @@ async function fetchUpcomingBookings(idUsuario: number): Promise<ReservaConDetal
     return [];
   }
 
-  // Filtrar en el cliente: excursiones que empiezan en las próximas 48h
+  // Filtrar en el cliente: excursiones cuya fecha_inicio cae en las próximas 48h
+  // PostgREST no soporta filtros directos en tablas embebidas, por eso filtramos aquí
   const now = new Date();
   const in48h = new Date(now.getTime() + 48 * 60 * 60 * 1000);
 
   return ((data ?? []) as ReservaConDetalles[]).filter((booking) => {
     const fechaInicio = booking.excursion?.fecha_inicio;
     if (!fechaInicio) return false;
-    const fecha = new Date(fechaInicio);
+    // C-03: fecha_inicio es 'YYYY-MM-DD' (DATE de PostgreSQL, sin hora).
+    // Parseamos como mediodía hora local para evitar que UTC midnight se interprete
+    // como madrugada en la zona horaria del usuario (UTC+1/+2 en España).
+    const [year, month, day] = fechaInicio.split('-').map(Number);
+    const fecha = new Date(year, month - 1, day, 12, 0, 0);
     return fecha >= now && fecha <= in48h;
   });
 }
 
-// Programa recordatorios locales para reservas próximas (24h antes)
-// Cancela notificaciones programadas anteriores para evitar duplicados
+// Programa recordatorios locales para reservas próximas (24h antes, a las 9:00)
 async function scheduleBookingReminders(bookings: ReservaConDetalles[]): Promise<void> {
   try {
-    // Cancelar todas las notificaciones programadas anteriores (evitar duplicados)
+    // Cancelar recordatorios de reservas anteriores antes de reprogramar
     await Notifications.cancelAllScheduledNotificationsAsync();
 
     for (const booking of bookings) {
@@ -73,9 +78,12 @@ async function scheduleBookingReminders(bookings: ReservaConDetalles[]): Promise
       const fechaInicio = booking.excursion?.fecha_inicio;
       if (!fechaInicio) continue;
 
-      // Calcular trigger: 24h antes del inicio de la excursión
-      const fechaExcursion = new Date(fechaInicio);
-      const fechaRecordatorio = new Date(fechaExcursion.getTime() - 24 * 60 * 60 * 1000);
+      // C-03: parsear fecha como hora local (mediodía) para evitar UTC midnight
+      const [year, month, day] = fechaInicio.split('-').map(Number);
+      const fechaExcursion = new Date(year, month - 1, day, 12, 0, 0);
+
+      // Recordatorio: el día anterior a las 9:00 hora local
+      const fechaRecordatorio = new Date(year, month - 1, day - 1, 9, 0, 0);
 
       // Solo programar si el recordatorio aún está en el futuro
       if (fechaRecordatorio <= new Date()) continue;
@@ -83,7 +91,7 @@ async function scheduleBookingReminders(bookings: ReservaConDetalles[]): Promise
       await Notifications.scheduleNotificationAsync({
         content: {
           title: '¡Mañana tienes una excursión!',
-          body: `Recuerda que mañana tienes reservada "${excursionNombre}". ¡Prepárate!`,
+          body: `Recuerda que mañana a mediodía tienes "${excursionNombre}". ¡Prepárate!`,
           sound: 'default',
           data: { booking_id: booking.id_reserva },
         },
@@ -92,11 +100,35 @@ async function scheduleBookingReminders(bookings: ReservaConDetalles[]): Promise
           date: fechaRecordatorio,
         },
       });
+
+      // Log solo en desarrollo
+      if (__DEV__) {
+        console.log(`[GranaTour] Recordatorio programado para ${fechaExcursion.toLocaleDateString('es-ES')} — "${excursionNombre}"`);
+      }
     }
   } catch (err) {
     // No bloquear el arranque si la programación falla
     console.error('[GranaTour] scheduleBookingReminders:', err);
   }
+}
+
+// I-03: Función auxiliar para evitar duplicar la lógica push+recordatorios en dos sitios.
+// Se llama al iniciar sesión (SIGNED_IN) o al recuperar sesión activa al arranque.
+function initPushAndReminders(
+  profile: Usuario,
+  registerPushToken: () => Promise<void>
+): void {
+  // I-01: Lanzar en background (fire-and-forget) para no bloquear setInitializing(false).
+  // La inicialización de la app no debe esperar al permiso de notificaciones ni a la red.
+  registerPushToken().catch((err) => {
+    console.error('[GranaTour] initPushAndReminders registerToken:', err);
+  });
+
+  fetchUpcomingBookings(profile.id_usuario)
+    .then((bookings) => scheduleBookingReminders(bookings))
+    .catch((err) => {
+      console.error('[GranaTour] initPushAndReminders reminders:', err);
+    });
 }
 
 export default function RootLayout() {
@@ -120,11 +152,9 @@ export default function RootLayout() {
           const profile = await fetchUserProfile(session.user.id);
           setUser(profile);
 
-          // Registrar token push y programar recordatorios al arrancar con sesión activa
+          // I-01: push+recordatorios en background para no retrasar setInitializing
           if (profile) {
-            await registerPushToken();
-            const upcomingBookings = await fetchUpcomingBookings(profile.id_usuario);
-            await scheduleBookingReminders(upcomingBookings);
+            initPushAndReminders(profile, registerPushToken);
           }
         }
       })
@@ -137,27 +167,30 @@ export default function RootLayout() {
       });
 
     // Listener de cambios de sesión (login, logout, token refresh)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      setSession(session);
-      // BUG-05: cargar perfil en cada cambio de sesión (login, registro, refresh)
-      if (session?.user?.id) {
-        const profile = await fetchUserProfile(session.user.id);
-        setUser(profile);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event: AuthChangeEvent, session) => {
+        setSession(session);
 
-        // Registrar token push y programar recordatorios tras login/registro
-        if (profile) {
-          await registerPushToken();
-          const upcomingBookings = await fetchUpcomingBookings(profile.id_usuario);
-          await scheduleBookingReminders(upcomingBookings);
+        if (session?.user?.id) {
+          const profile = await fetchUserProfile(session.user.id);
+          setUser(profile);
+
+          // I-07: Solo registrar token y recordatorios en SIGNED_IN, no en TOKEN_REFRESHED
+          // (onAuthStateChange se dispara ~cada hora en token refresh, evitamos re-registro)
+          if (profile && event === 'SIGNED_IN') {
+            initPushAndReminders(profile, registerPushToken);
+          }
+        } else {
+          // Logout: limpiar perfil y desactivar token push
+          setUser(null);
+          deactivateToken().catch((err) => {
+            console.error('[GranaTour] deactivateToken error:', err);
+          });
+          // Cancelar notificaciones programadas al cerrar sesión
+          Notifications.cancelAllScheduledNotificationsAsync().catch(() => {});
         }
-      } else {
-        // Logout: limpiar perfil y desactivar token push
-        setUser(null);
-        await deactivateToken();
-        // Cancelar notificaciones programadas al cerrar sesión
-        Notifications.cancelAllScheduledNotificationsAsync().catch(() => {});
       }
-    });
+    );
 
     // Listener para manejar notificaciones recibidas mientras la app está activa
     notificationListener.current = Notifications.addNotificationReceivedListener((notification) => {

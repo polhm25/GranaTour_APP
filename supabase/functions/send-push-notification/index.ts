@@ -41,6 +41,45 @@ serve(async (req: Request) => {
     });
   }
 
+  // C-02: Verificar que el caller está autenticado y tiene rol 'guia'
+  const authHeader = req.headers.get('Authorization');
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return new Response(JSON.stringify({ error: 'No autorizado' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  const jwt = authHeader.replace('Bearer ', '');
+  const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+
+  // Cliente Supabase con service role para leer push_tokens (bypass RLS)
+  const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+
+  // Verificar JWT del caller con el cliente autenticado del usuario
+  const { data: { user: callerUser }, error: authError } = await supabaseAdmin.auth.getUser(jwt);
+  if (authError || !callerUser) {
+    return new Response(JSON.stringify({ error: 'Token de acceso inválido' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  // Verificar que el caller tiene rol 'guia' en la tabla de usuarios
+  const { data: callerProfile, error: profileError } = await supabaseAdmin
+    .from('usuarios')
+    .select('rol')
+    .eq('supabase_auth_id', callerUser.id)
+    .single();
+
+  if (profileError || !callerProfile || callerProfile.rol !== 'guia') {
+    return new Response(JSON.stringify({ error: 'Solo los guías pueden enviar notificaciones' }), {
+      status: 403,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
   try {
     const body: SendPushBody = await req.json();
     const { id_usuario, booking_id, excursion_nombre, new_status } = body;
@@ -52,13 +91,7 @@ serve(async (req: Request) => {
       });
     }
 
-    // Cliente Supabase con service role para leer push_tokens (bypass RLS)
-    const supabaseAdmin = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    );
-
-    // Obtener tokens activos del usuario
+    // Obtener tokens activos del usuario cliente
     const { data: tokens, error: tokensError } = await supabaseAdmin
       .from('push_tokens')
       .select('token')
