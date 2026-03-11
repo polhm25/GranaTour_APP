@@ -77,7 +77,9 @@ interface GuideState {
   excursionBookings: ReservaConCliente[];
   loadingExcursions: boolean;
   loadingBookings: boolean;
-  loadingUpdate: boolean; // Actualizando estado de una reserva
+  // ID de la reserva que se está actualizando (null = ninguna en curso)
+  // Un flag por reserva evita bloquear todas las tarjetas a la vez (I5)
+  updatingBookingId: number | null;
   error: string | null;
 
   // Acciones
@@ -99,7 +101,7 @@ export const useGuideStore = create<GuideState>((set, get) => ({
   excursionBookings: [],
   loadingExcursions: false,
   loadingBookings: false,
-  loadingUpdate: false,
+  updatingBookingId: null,
   error: null,
 
   // ── fetchGuideExcursions ───────────────────────────────────────────────────
@@ -190,7 +192,14 @@ export const useGuideStore = create<GuideState>((set, get) => ({
   // ── updateBookingStatus ───────────────────────────────────────────────────
   // Confirma o cancela una reserva. Si se cancela, devuelve plazas a la excursión.
   updateBookingStatus: async (bookingId, newStatus, numPersonas, excursionId) => {
-    set({ loadingUpdate: true, error: null });
+    // C1: Verificar rol como defensa en profundidad (la RLS también lo protege en DB)
+    const user = useAuthStore.getState().user;
+    if (!user || user.rol !== 'guia') {
+      set({ error: 'No tienes permisos para gestionar reservas' });
+      return false;
+    }
+
+    set({ updatingBookingId: bookingId, error: null });
     try {
       const { error: updateError } = await supabase
         .from('reservas')
@@ -236,7 +245,7 @@ export const useGuideStore = create<GuideState>((set, get) => ({
         return {
           excursionBookings: updatedBookings,
           guideExcursions: updatedGuideExcursions,
-          loadingUpdate: false,
+          updatingBookingId: null,
         };
       });
 
@@ -244,7 +253,7 @@ export const useGuideStore = create<GuideState>((set, get) => ({
     } catch (error) {
       set({
         error: getGuideErrorMessage(error, 'updateBookingStatus'),
-        loadingUpdate: false,
+        updatingBookingId: null,
       });
       return false;
     }
