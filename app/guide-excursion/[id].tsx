@@ -2,7 +2,7 @@
 // - Lista de reservas (pendiente/confirmada) con acciones de confirmar/cancelar
 // - Botón "Iniciar excursión" que arranca el tracking GPS vinculado
 // - Vista de participantes confirmados cuando el tracking está activo
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -20,6 +20,7 @@ import { useShallow } from 'zustand/react/shallow';
 
 import { useGuideStore } from '@/stores/guideStore';
 import { useActivityStore } from '@/stores/activityStore';
+import { useAuthStore } from '@/stores/authStore';
 import { COLORS } from '@/lib/constants';
 import { formatDate, formatPrice } from '@/lib/utils';
 import type { ReservaConCliente } from '@/stores/guideStore';
@@ -37,12 +38,13 @@ const ESTADO_COLORS: Record<EstadoReserva, { bg: string; text: string; label: st
 
 interface BookingCardProps {
   booking: ReservaConCliente;
-  loadingUpdate: boolean;
+  // true solo si ESTA reserva específica está siendo actualizada (I5)
+  isUpdating: boolean;
   onConfirm: (booking: ReservaConCliente) => void;
   onCancel: (booking: ReservaConCliente) => void;
 }
 
-function BookingCard({ booking, loadingUpdate, onConfirm, onCancel }: BookingCardProps) {
+function BookingCard({ booking, isUpdating, onConfirm, onCancel }: BookingCardProps) {
   const colorConfig = ESTADO_COLORS[booking.estado];
   const clientName = booking.usuario
     ? `${booking.usuario.nombre} ${booking.usuario.ap1}`
@@ -96,23 +98,25 @@ function BookingCard({ booking, loadingUpdate, onConfirm, onCancel }: BookingCar
           {booking.estado === 'pendiente' && (
             <Pressable
               onPress={() => onConfirm(booking)}
-              disabled={loadingUpdate}
+              disabled={isUpdating}
               className="flex-1 bg-primary-500 rounded-lg py-2 items-center"
-              style={{ opacity: loadingUpdate ? 0.5 : 1 }}
+              style={{ opacity: isUpdating ? 0.5 : 1 }}
             >
-              <Text className="text-white text-xs font-semibold">
-                {loadingUpdate ? 'Guardando…' : 'Confirmar'}
-              </Text>
+              {isUpdating ? (
+                <ActivityIndicator size="small" color="white" />
+              ) : (
+                <Text className="text-white text-xs font-semibold">Confirmar</Text>
+              )}
             </Pressable>
           )}
           <Pressable
             onPress={() => onCancel(booking)}
-            disabled={loadingUpdate}
+            disabled={isUpdating}
             className="flex-1 bg-neutral-100 rounded-lg py-2 items-center"
-            style={{ opacity: loadingUpdate ? 0.5 : 1 }}
+            style={{ opacity: isUpdating ? 0.5 : 1 }}
           >
             <Text className="text-neutral-700 text-xs font-semibold">
-              {loadingUpdate ? 'Guardando…' : 'Cancelar'}
+              {isUpdating ? 'Guardando…' : 'Cancelar'}
             </Text>
           </Pressable>
         </View>
@@ -129,7 +133,8 @@ function ParticipantCard({ booking }: { booking: ReservaConCliente }) {
     : 'Participante';
 
   return (
-    <View className="flex-row items-center bg-white rounded-xl p-3 mb-2"
+    <View
+      className="flex-row items-center bg-white rounded-xl p-3 mb-2"
       style={{ elevation: 1, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 2 }}
     >
       <View className="w-9 h-9 rounded-full bg-emerald-100 items-center justify-center mr-3">
@@ -156,11 +161,11 @@ export default function GuideExcursionScreen() {
   const isValidId = !isNaN(excursionId);
 
   // ── Datos del store de guía ───────────────────────────────────────────────
-  const { excursionBookings, loadingBookings, loadingUpdate, error } = useGuideStore(
+  const { excursionBookings, loadingBookings, updatingBookingId, error } = useGuideStore(
     useShallow((s) => ({
       excursionBookings: s.excursionBookings,
       loadingBookings: s.loadingBookings,
-      loadingUpdate: s.loadingUpdate,
+      updatingBookingId: s.updatingBookingId,
       error: s.error,
     }))
   );
@@ -168,8 +173,11 @@ export default function GuideExcursionScreen() {
   const updateBookingStatus = useGuideStore((s) => s.updateBookingStatus);
   const clearError = useGuideStore((s) => s.clearError);
   // Excursión seleccionada del panel del guía (para mostrar nombre)
-  const guideExcursion = useGuideStore((s) =>
-    s.guideExcursions.find((e) => e.id_excursion === excursionId)
+  // useMemo para estabilizar la referencia del resultado del .find() (S3)
+  const guideExcursions = useGuideStore((s) => s.guideExcursions);
+  const guideExcursion = useMemo(
+    () => guideExcursions.find((e) => e.id_excursion === excursionId),
+    [guideExcursions, excursionId]
   );
 
   // ── Datos del store de actividad para tracking ────────────────────────────
@@ -182,16 +190,24 @@ export default function GuideExcursionScreen() {
   );
   const startTracking = useActivityStore((s) => s.startTracking);
 
-  // Estado local de carga del botón iniciar
+  // ── Usuario actual ────────────────────────────────────────────────────────
+  const user = useAuthStore((s) => s.user);
+
+  // Estado local de carga del botón iniciar (para el texto del botón)
   const [startingLocal, setStartingLocal] = useState(false);
 
   // Tracking activo vinculado específicamente a esta excursión
   const isTrackingThisExcursion = trackingActive && currentExcursionId === excursionId;
 
-  // Participantes confirmados (para mostrar durante el tracking)
-  const participants = excursionBookings.filter((b) => b.estado === 'confirmada');
-  // Reservas pendientes de confirmar
-  const pendingBookings = excursionBookings.filter((b) => b.estado === 'pendiente');
+  // Filtros memoizados para no recalcular en cada render (S2)
+  const participants = useMemo(
+    () => excursionBookings.filter((b) => b.estado === 'confirmada'),
+    [excursionBookings]
+  );
+  const pendingBookings = useMemo(
+    () => excursionBookings.filter((b) => b.estado === 'pendiente'),
+    [excursionBookings]
+  );
 
   // ── Efectos ───────────────────────────────────────────────────────────────
 
@@ -210,9 +226,9 @@ export default function GuideExcursionScreen() {
 
   // ── Manejadores ───────────────────────────────────────────────────────────
 
-  // Confirmar una reserva pendiente
+  // Confirmar una reserva pendiente (I7: try/catch para no perder la excepción)
   const handleConfirm = useCallback(
-    async (booking: ReservaConCliente) => {
+    (booking: ReservaConCliente) => {
       const clientName = booking.usuario
         ? `${booking.usuario.nombre} ${booking.usuario.ap1}`
         : 'este cliente';
@@ -224,13 +240,16 @@ export default function GuideExcursionScreen() {
           { text: 'Cancelar', style: 'cancel' },
           {
             text: 'Confirmar',
-            onPress: async () => {
-              await updateBookingStatus(
+            onPress: () => {
+              // I7: No async en onPress de Alert; gestionar la promesa explícitamente
+              updateBookingStatus(
                 booking.id_reserva,
                 'confirmada',
                 booking.num_personas,
                 excursionId
-              );
+              ).catch((err) => {
+                console.error('[GranaTour] handleConfirm error:', err);
+              });
             },
           },
         ]
@@ -239,7 +258,7 @@ export default function GuideExcursionScreen() {
     [updateBookingStatus, excursionId]
   );
 
-  // Cancelar una reserva
+  // Cancelar una reserva (I7: try/catch para no perder la excepción)
   const handleCancel = useCallback(
     (booking: ReservaConCliente) => {
       const clientName = booking.usuario
@@ -254,13 +273,16 @@ export default function GuideExcursionScreen() {
           {
             text: 'Cancelar reserva',
             style: 'destructive',
-            onPress: async () => {
-              await updateBookingStatus(
+            onPress: () => {
+              // I7: No async en onPress de Alert; gestionar la promesa explícitamente
+              updateBookingStatus(
                 booking.id_reserva,
                 'cancelada',
                 booking.num_personas,
                 excursionId
-              );
+              ).catch((err) => {
+                console.error('[GranaTour] handleCancel error:', err);
+              });
             },
           },
         ]
@@ -269,7 +291,7 @@ export default function GuideExcursionScreen() {
     [updateBookingStatus, excursionId]
   );
 
-  // Iniciar tracking GPS vinculado a esta excursión
+  // Iniciar tracking GPS vinculado a esta excursión (C3: try/catch/finally)
   const handleStartTracking = useCallback(async () => {
     const excursionName = guideExcursion?.nombre_ruta ?? 'esta excursión';
 
@@ -280,29 +302,46 @@ export default function GuideExcursionScreen() {
         { text: 'Cancelar', style: 'cancel' },
         {
           text: 'Iniciar',
-          onPress: async () => {
+          onPress: () => {
+            // C3: try/catch/finally garantiza que setStartingLocal(false) siempre se ejecuta
             setStartingLocal(true);
-            await startTracking(excursionId);
-            setStartingLocal(false);
-            // Navegar a la tab de actividad para ver el tracking en tiempo real
-            router.replace('/(tabs)/activity');
+            startTracking(excursionId)
+              .then(() => {
+                // Navegar a la tab de actividad para ver el tracking en tiempo real
+                router.replace('/(tabs)/activity');
+              })
+              .catch((err) => {
+                // startTracking ya gestiona su propio error en el store
+                console.error('[GranaTour] startTracking error:', err);
+              })
+              .finally(() => {
+                setStartingLocal(false);
+              });
           },
         },
       ]
     );
   }, [excursionId, guideExcursion, startTracking, router]);
 
-  // Render de cada booking en la lista
-  const renderBooking = useCallback(
+  // Render de cada booking en la lista de reservas pendientes
+  const renderPendingBooking = useCallback(
     ({ item }: ListRenderItemInfo<ReservaConCliente>) => (
       <BookingCard
         booking={item}
-        loadingUpdate={loadingUpdate}
+        isUpdating={updatingBookingId === item.id_reserva}
         onConfirm={handleConfirm}
         onCancel={handleCancel}
       />
     ),
-    [loadingUpdate, handleConfirm, handleCancel]
+    [updatingBookingId, handleConfirm, handleCancel]
+  );
+
+  // Render de cada participante en la lista de confirmados
+  const renderParticipant = useCallback(
+    ({ item }: ListRenderItemInfo<ReservaConCliente>) => (
+      <ParticipantCard booking={item} />
+    ),
+    []
   );
 
   const keyExtractor = useCallback((item: ReservaConCliente) => String(item.id_reserva), []);
@@ -313,6 +352,28 @@ export default function GuideExcursionScreen() {
     return (
       <SafeAreaView className="flex-1 bg-neutral-50 items-center justify-center p-6">
         <Text className="text-neutral-500">ID de excursión inválido</Text>
+      </SafeAreaView>
+    );
+  }
+
+  // ── Guardia de rol (I6): solo guías pueden acceder ───────────────────────
+
+  if (user && user.rol !== 'guia') {
+    return (
+      <SafeAreaView className="flex-1 bg-neutral-50 items-center justify-center p-6">
+        <Ionicons name="lock-closed-outline" size={48} color={COLORS.neutral[300]} />
+        <Text className="text-lg font-semibold text-neutral-700 mt-4 text-center">
+          Acceso restringido
+        </Text>
+        <Text className="text-sm text-neutral-500 mt-2 text-center">
+          Esta sección es exclusiva para guías de GranaTour.
+        </Text>
+        <Pressable
+          onPress={() => router.back()}
+          className="mt-6 bg-neutral-100 rounded-xl px-6 py-3"
+        >
+          <Text className="text-neutral-700 font-medium">Volver</Text>
+        </Pressable>
       </SafeAreaView>
     );
   }
@@ -382,7 +443,8 @@ export default function GuideExcursionScreen() {
           </Pressable>
         )}
 
-        {/* Sección: participantes confirmados (visible siempre, prominente durante tracking) */}
+        {/* Sección: participantes confirmados */}
+        {/* C2: FlatList con scrollEnabled={false} para ambas secciones (consistencia) */}
         <View className="px-4 mb-5">
           <View className="flex-row items-center justify-between mb-3">
             <Text className="text-base font-bold text-neutral-900">
@@ -403,9 +465,12 @@ export default function GuideExcursionScreen() {
               <Text className="text-sm text-neutral-400 mt-2">Ningún participante confirmado</Text>
             </View>
           ) : (
-            participants.map((booking) => (
-              <ParticipantCard key={booking.id_reserva} booking={booking} />
-            ))
+            <FlatList
+              data={participants}
+              keyExtractor={keyExtractor}
+              renderItem={renderParticipant}
+              scrollEnabled={false}
+            />
           )}
         </View>
 
@@ -429,7 +494,7 @@ export default function GuideExcursionScreen() {
               <FlatList
                 data={pendingBookings}
                 keyExtractor={keyExtractor}
-                renderItem={renderBooking}
+                renderItem={renderPendingBooking}
                 scrollEnabled={false}
               />
             )}
