@@ -16,7 +16,7 @@
 | 4 | Mapa interactivo | ✅ COMPLETADA | 2026-03-10 |
 | 5 | GPS Tracking | ✅ COMPLETADA | 2026-03-10 |
 | 6 | Fotos geolocalizadas | ✅ COMPLETADA | 2026-03-10 |
-| 7 | Reviews y valoraciones | ⏳ Pendiente | - |
+| 7 | Reviews y valoraciones | ✅ COMPLETADA | 2026-03-11 |
 | 8 | Panel guía | ⏳ Pendiente | - |
 | 9 | Notificaciones push | ⏳ Pendiente | - |
 | 10 | Modo offline | ⏳ Pendiente | - |
@@ -331,6 +331,48 @@ app/(tabs)/activity.tsx      ← botón flotante durante tracking con geolocaliz
 app/(tabs)/profile.tsx       ← galería personal 3 columnas con lightbox
 app/excursion/[id].tsx       ← galería comunidad 2 columnas con FlatList + lightbox
 app.json                     ← permisos iOS/Android para cámara y galería
+```
+
+---
+
+## FASE 7 - Reviews y valoraciones ✅ COMPLETADA
+
+### Tareas completadas
+- [x] `stores/reviewsStore.ts` → estado completo (reviews, userReview, averageRating, userCanReview), acciones fetch/create/edit/delete, flags de loading independientes
+- [x] `components/StarRating.tsx` → componente interactivo + display, props: value, onChange, size, color, showValue, style
+- [x] `components/ReviewCard.tsx` → tarjeta con avatar/placeholder, estrellas, comentario, badge "Mi valoración", botones editar/eliminar (prop loadingDelete para deshabilitar durante borrado)
+- [x] `components/ExcursionCard.tsx` → mostrar `valoracion_media` con ⭐ y texto "valoración"
+- [x] `stores/excursionsStore.ts` → `reviews(puntuacion)` en SELECT_CON_GUIA, helper `computeValoracionMedia` aplicado en todos los fetches
+- [x] `lib/types.ts` → `valoracion_media?: number | null` añadido a `ExcursionConGuia`
+- [x] `app/excursion/[id].tsx` → sección "Valoraciones" completa: media, formulario condicional (nueva/edición), lista con ReviewCard, errores via Alert
+- [x] `supabase/recalcular_valoracion_guia.sql` → RPC SECURITY DEFINER que recalcula la valoración del guía (ejecutar en Supabase SQL Editor)
+
+### Fix post-review
+- [x] C-01: Validación `isValidPuntuacion()` en `createReview` y `editReview` (entero 1-5)
+- [x] C-02: `updateGuideRating` usa `supabase.rpc('recalcular_valoracion_guia', { p_id_excursion })` en lugar de UPDATE directo en `usuarios` (RLS bypass vía SECURITY DEFINER)
+- [x] C-03: Tipo local `RawReviewRow` + función `mapToReviewConUsuario` reemplaza el casteo `as unknown as ReviewConUsuario[]`
+- [x] I-01: `fetchReviewsByExcursion` acepta `keepExisting?: boolean` — llamadas internas desde create/edit usan `true` para evitar flash visual
+- [x] I-02: `id_excursion` guardado al inicio de `editReview` antes de operaciones async (previene race condition con userReview)
+- [x] I-03: `loadingDelete` pasado como prop a `ReviewCard` → deshabilita botón y muestra "Eliminando…"
+- [x] I-07: `updatePayload` tipado con `EditReviewPayload` (antes `Record<string, unknown>`)
+
+### Criterio de éxito
+- [x] Ver media de valoraciones en ExcursionCard y en detalle de excursión
+- [x] Crear review solo si tiene reserva confirmada
+- [x] Editar review propia
+- [x] Eliminar review propia con confirmación
+- [x] valoracion del guía se actualiza automáticamente vía RPC
+
+### Fase 7 (completada)
+```
+stores/reviewsStore.ts         ← CRUD completo, validación, RPC para guía, keepExisting
+components/StarRating.tsx      ← componente reutilizable interactivo + display
+components/ReviewCard.tsx      ← tarjeta con acciones, prop loadingDelete
+components/ExcursionCard.tsx   ← muestra valoracion_media
+stores/excursionsStore.ts      ← valoracion_media calculada de reviews JOIN
+lib/types.ts                   ← valoracion_media en ExcursionConGuia
+app/excursion/[id].tsx         ← sección Valoraciones integrada
+supabase/recalcular_valoracion_guia.sql ← RPC a ejecutar en Supabase SQL Editor
 ```
 
 ---

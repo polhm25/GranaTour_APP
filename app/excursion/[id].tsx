@@ -87,16 +87,27 @@ export default function ExcursionDetailScreen() {
   const clearExcursionPhotos = usePhotosStore((state) => state.clearExcursionPhotos);
 
   // ── Store de reviews ──────────────────────────────────────────────────────
-  const { reviews, userReview, averageRating, userCanReview, loadingList: loadingReviews, loadingCreate: loadingCreateReview, loadingEdit: loadingEditReview, error: reviewsError } = useReviewsStore(
+  const {
+    reviews,
+    userReview,
+    averageRating,
+    userCanReview,
+    loadingReviews,
+    loadingCreateReview,
+    loadingEditReview,
+    loadingDeleteReview,
+    reviewsError,
+  } = useReviewsStore(
     useShallow((state) => ({
       reviews: state.reviews,
       userReview: state.userReview,
       averageRating: state.averageRating,
       userCanReview: state.userCanReview,
-      loadingList: state.loadingList,
-      loadingCreate: state.loadingCreate,
-      loadingEdit: state.loadingEdit,
-      error: state.error,
+      loadingReviews: state.loadingList,
+      loadingCreateReview: state.loadingCreate,
+      loadingEditReview: state.loadingEdit,
+      loadingDeleteReview: state.loadingDelete,
+      reviewsError: state.error,
     }))
   );
 
@@ -609,6 +620,7 @@ export default function ExcursionDetailScreen() {
                 isOwn={review.id_usuario === currentUser?.id_usuario}
                 onEdit={review.id_usuario === currentUser?.id_usuario ? handleEditReview : undefined}
                 onDelete={review.id_usuario === currentUser?.id_usuario ? handleDeleteReview : undefined}
+                loadingDelete={loadingDeleteReview}
               />
             ))
           )}

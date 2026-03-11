@@ -249,6 +249,32 @@
 
 ---
 
+## Errores Fase 7 - Reviews y valoraciones
+
+### [FASE-7] updateGuideRating hacía UPDATE directo en tabla usuarios desde el cliente
+- **Fecha:** 2026-03-11
+- **Archivo(s):** `stores/reviewsStore.ts`
+- **Error:** UPDATE en `usuarios.valoracion` fallaba silenciosamente o representaba vulnerabilidad de seguridad (cualquier usuario podría actualizar la valoración de otro)
+- **Causa:** La función `updateGuideRating` hacía un UPDATE directo en `usuarios` desde el cliente. En Supabase Cloud, RLS bloquea esto silenciosamente.
+- **Solución:** Crear RPC `recalcular_valoracion_guia(p_id_excursion INTEGER)` con SECURITY DEFINER en PostgreSQL. El cliente llama a `supabase.rpc(...)` en lugar de hacer UPDATE directo.
+- **Aprendizaje:** Nunca hacer UPDATE de datos de otros usuarios desde el cliente. Usar RPCs con SECURITY DEFINER para operaciones que requieren bypasear RLS de forma controlada.
+
+### [FASE-7] Supabase infiere campo de JOIN como array en TypeScript aunque sea relación many-to-one
+- **Fecha:** 2026-03-11
+- **Archivo(s):** `stores/reviewsStore.ts`
+- **Error:** TypeScript error al intentar castear `data` a `RawReviewRow[]`: `usuario` era inferido como array aunque la relación `!id_usuario` es many-to-one
+- **Causa:** El sistema de tipos de Supabase infiere los campos de JOIN como arrays en algunos casos, independientemente de la cardinalidad real
+- **Solución:** Definir `RawReviewRow.usuario` como `Pick<Usuario,...> | Pick<Usuario,...>[] | null` + función `mapToReviewConUsuario` que normaliza con `Array.isArray` check
+- **Aprendizaje:** Para JOINs de Supabase, definir siempre el tipo local con la unión array/objeto y normalizar en una función de mapeo explícita
+
+### [FASE-7] Flash visual al crear/editar review por limpieza del store durante el refetch
+- **Fecha:** 2026-03-11
+- **Archivo(s):** `stores/reviewsStore.ts`
+- **Error:** Al crear/editar una review, la lista de valoraciones parpadeaba brevemente (vacía o en loading) mientras se refrescaba
+- **Causa:** `fetchReviewsByExcursion` siempre limpiaba `reviews: []` al inicio, incluso cuando era llamada internamente desde create/edit
+- **Solución:** Añadir parámetro `keepExisting?: boolean` a `fetchReviewsByExcursion`. Llamadas internas desde create/edit usan `keepExisting=true` para no limpiar la lista existente
+- **Aprendizaje:** Cuando un fetch se usa tanto para carga inicial (debe limpiar) como para refresh interno (no debe limpiar), parametrizar el comportamiento en lugar de duplicar la función
+
 ## Patrones de error recurrentes
 
 | Patrón | Descripción | Prevención |

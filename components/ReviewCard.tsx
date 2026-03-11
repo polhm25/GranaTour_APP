@@ -18,9 +18,11 @@ interface ReviewCardProps {
   onEdit?: () => void;
   /** Callback para eliminar la review (solo disponible si isOwn=true) */
   onDelete?: () => void;
+  /** true mientras se está procesando el borrado (deshabilita el botón eliminar - I-03) */
+  loadingDelete?: boolean;
 }
 
-export function ReviewCard({ review, isOwn = false, onEdit, onDelete }: ReviewCardProps) {
+export function ReviewCard({ review, isOwn = false, onEdit, onDelete, loadingDelete = false }: ReviewCardProps) {
   // Formatear la fecha en español: "12 de marzo de 2025"
   const formattedDate = new Date(review.fecha).toLocaleDateString('es-ES', {
     day: 'numeric',
@@ -102,9 +104,19 @@ export function ReviewCard({ review, isOwn = false, onEdit, onDelete }: ReviewCa
             </TouchableOpacity>
           )}
           {onDelete && (
-            <TouchableOpacity onPress={onDelete} activeOpacity={0.7}>
-              <Text className="text-error font-medium" style={styles.actionBtn}>
-                Eliminar
+            <TouchableOpacity
+              onPress={onDelete}
+              activeOpacity={0.7}
+              disabled={loadingDelete}
+            >
+              <Text
+                className="font-medium"
+                style={[
+                  styles.actionBtn,
+                  loadingDelete ? styles.actionBtnDisabled : styles.actionBtnDelete,
+                ]}
+              >
+                {loadingDelete ? 'Eliminando…' : 'Eliminar'}
               </Text>
             </TouchableOpacity>
           )}
@@ -150,5 +162,11 @@ const styles = StyleSheet.create({
   },
   actionBtn: {
     fontSize: 13,
+  },
+  actionBtnDelete: {
+    color: COLORS.error,
+  },
+  actionBtnDisabled: {
+    color: COLORS.neutral[400],
   },
 });

@@ -3,7 +3,7 @@ import { create } from 'zustand';
 
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
-import type { Review, ReviewConUsuario } from '@/lib/types';
+import type { Review, ReviewConUsuario, Usuario } from '@/lib/types';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -16,6 +16,28 @@ export interface NewReviewData {
 // Campos seleccionados en las queries de reviews (incluye JOIN a usuarios)
 const REVIEW_FIELDS =
   'id_review, id_usuario, id_excursion, puntuacion, comentario, fecha, usuario:usuarios!id_usuario(id_usuario, nombre, ap1, avatar_url)';
+
+// Tipo local que describe la respuesta de Supabase para REVIEW_FIELDS.
+// Supabase puede devolver los campos de JOIN como array o como objeto único,
+// dependiendo de la relación inferida; se maneja en mapToReviewConUsuario. (C-03)
+type RawReviewRow = {
+  id_review: number;
+  id_usuario: number;
+  id_excursion: number;
+  puntuacion: number;
+  comentario: string | null;
+  fecha: string;
+  usuario:
+    | Pick<Usuario, 'id_usuario' | 'nombre' | 'ap1' | 'avatar_url'>
+    | Pick<Usuario, 'id_usuario' | 'nombre' | 'ap1' | 'avatar_url'>[]
+    | null;
+};
+
+// Payload tipado para edición de reviews (I-07)
+type EditReviewPayload = {
+  puntuacion?: number;
+  comentario?: string | null;
+};
 
 interface ReviewsState {
   // Lista de reviews de la excursión actual
@@ -35,7 +57,8 @@ interface ReviewsState {
   error: string | null;
 
   // Acciones
-  fetchReviewsByExcursion: (excursionId: number) => Promise<void>;
+  // keepExisting: true para refrescar sin limpiar la lista (evita flash visual - I-01)
+  fetchReviewsByExcursion: (excursionId: number, keepExisting?: boolean) => Promise<void>;
   createReview: (data: NewReviewData) => Promise<Review | null>;
   editReview: (reviewId: number, data: Partial<NewReviewData>) => Promise<void>;
   deleteReview: (reviewId: number) => Promise<void>;
@@ -45,6 +68,23 @@ interface ReviewsState {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+// Convierte la respuesta raw de Supabase al tipo ReviewConUsuario.
+// El campo usuario puede venir como objeto o array (Supabase lo infiere diferente
+// según la versión de tipos); se normaliza aquí para evitar el cast unsound. (C-03)
+function mapToReviewConUsuario(row: RawReviewRow): ReviewConUsuario {
+  const rawUsuario = row.usuario;
+  const usuario = Array.isArray(rawUsuario) ? (rawUsuario[0] ?? undefined) : (rawUsuario ?? undefined);
+  return {
+    id_review: row.id_review,
+    id_usuario: row.id_usuario,
+    id_excursion: row.id_excursion,
+    puntuacion: row.puntuacion,
+    comentario: row.comentario,
+    fecha: row.fecha,
+    usuario,
+  };
+}
+
 // Calcula la media de puntuaciones a partir del array de reviews
 function calculateAverage(reviews: ReviewConUsuario[]): number | null {
   if (reviews.length === 0) return null;
@@ -52,45 +92,22 @@ function calculateAverage(reviews: ReviewConUsuario[]): number | null {
   return Math.round((sum / reviews.length) * 10) / 10;
 }
 
-// Actualiza la valoración del guía en la tabla usuarios tras cambiar las reviews.
+// Valida que puntuacion sea un entero entre 1 y 5 (C-01)
+function isValidPuntuacion(puntuacion: number): boolean {
+  return Number.isInteger(puntuacion) && puntuacion >= 1 && puntuacion <= 5;
+}
+
+// Llama al RPC recalcular_valoracion_guia de Supabase (SECURITY DEFINER)
+// para actualizar la valoración del guía tras cambios en sus reviews. (C-02)
 // Se llama de forma asíncrona (fire-and-forget) para no bloquear la UI.
 async function updateGuideRating(excursionId: number): Promise<void> {
   try {
-    // Paso 1: obtener el guía de la excursión
-    const { data: excData } = await supabase
-      .from('excursiones')
-      .select('id_guia')
-      .eq('id_excursion', excursionId)
-      .single();
-
-    if (!excData?.id_guia) return;
-
-    // Paso 2: obtener todas las excursiones del guía
-    const { data: excursionesData } = await supabase
-      .from('excursiones')
-      .select('id_excursion')
-      .eq('id_guia', excData.id_guia);
-
-    if (!excursionesData || excursionesData.length === 0) return;
-
-    const excursionIds = excursionesData.map((e) => e.id_excursion as number);
-
-    // Paso 3: obtener todas las reviews de esas excursiones
-    const { data: reviewsData } = await supabase
-      .from('reviews')
-      .select('puntuacion')
-      .in('id_excursion', excursionIds);
-
-    const media =
-      reviewsData && reviewsData.length > 0
-        ? reviewsData.reduce((sum: number, r) => sum + (r.puntuacion as number), 0) / reviewsData.length
-        : null;
-
-    // Paso 4: actualizar el campo valoracion del guía
-    await supabase
-      .from('usuarios')
-      .update({ valoracion: media !== null ? Math.round(media * 100) / 100 : null })
-      .eq('id_usuario', excData.id_guia);
+    const { error } = await supabase.rpc('recalcular_valoracion_guia', {
+      p_id_excursion: excursionId,
+    });
+    if (error) {
+      console.error('[GranaTour] updateGuideRating RPC error:', error);
+    }
   } catch (err) {
     console.error('[GranaTour] updateGuideRating error:', err);
   }
@@ -110,15 +127,20 @@ export const useReviewsStore = create<ReviewsState>((set, get) => ({
   error: null,
 
   // ── fetchReviewsByExcursion ────────────────────────────────────────────────
-  fetchReviewsByExcursion: async (excursionId: number): Promise<void> => {
-    set({
-      loadingList: true,
-      error: null,
-      reviews: [],
-      userReview: null,
-      averageRating: null,
-      userCanReview: false,
-    });
+  fetchReviewsByExcursion: async (excursionId: number, keepExisting = false): Promise<void> => {
+    // keepExisting=true: no limpiar reviews existentes para evitar flash visual (I-01)
+    set(
+      keepExisting
+        ? { loadingList: true, error: null }
+        : {
+            loadingList: true,
+            error: null,
+            reviews: [],
+            userReview: null,
+            averageRating: null,
+            userCanReview: false,
+          }
+    );
 
     try {
       // Obtener reviews con datos del usuario que valoró
@@ -134,7 +156,8 @@ export const useReviewsStore = create<ReviewsState>((set, get) => ({
         return;
       }
 
-      const reviews = (data ?? []) as unknown as ReviewConUsuario[];
+      // Mapeo explícito al tipo ReviewConUsuario para evitar casteo inseguro (C-03)
+      const reviews: ReviewConUsuario[] = (data as RawReviewRow[]).map(mapToReviewConUsuario);
       const averageRating = calculateAverage(reviews);
 
       // Buscar la review del usuario autenticado (si existe)
@@ -175,6 +198,12 @@ export const useReviewsStore = create<ReviewsState>((set, get) => ({
       return null;
     }
 
+    // Validación de puntuacion antes de enviar a Supabase (C-01)
+    if (!isValidPuntuacion(data.puntuacion)) {
+      set({ error: 'La puntuación debe ser un valor entero entre 1 y 5' });
+      return null;
+    }
+
     set({ loadingCreate: true, error: null });
 
     try {
@@ -206,10 +235,10 @@ export const useReviewsStore = create<ReviewsState>((set, get) => ({
 
       const newReview = inserted as Review;
 
-      // Refrescar la lista local para incluir la nueva review con datos del usuario
-      await get().fetchReviewsByExcursion(data.id_excursion);
+      // Refrescar la lista sin limpiar la existente para evitar flash visual (I-01)
+      await get().fetchReviewsByExcursion(data.id_excursion, true);
 
-      // Actualizar valoración del guía en segundo plano
+      // Actualizar valoración del guía en segundo plano (C-02)
       updateGuideRating(data.id_excursion);
 
       set({ loadingCreate: false });
@@ -229,10 +258,20 @@ export const useReviewsStore = create<ReviewsState>((set, get) => ({
       return;
     }
 
+    // Validación de puntuacion antes de enviar a Supabase (C-01)
+    if (data.puntuacion !== undefined && !isValidPuntuacion(data.puntuacion)) {
+      set({ error: 'La puntuación debe ser un valor entero entre 1 y 5' });
+      return;
+    }
+
+    // Guardar id_excursion al inicio para evitar race condition si userReview cambia (I-02)
+    const excursionId = get().userReview?.id_excursion;
+
     set({ loadingEdit: true, error: null });
 
     try {
-      const updatePayload: Record<string, unknown> = {};
+      // Payload tipado para evitar Record<string, unknown> (I-07)
+      const updatePayload: EditReviewPayload = {};
       if (data.puntuacion !== undefined) updatePayload.puntuacion = data.puntuacion;
       if (data.comentario !== undefined) updatePayload.comentario = data.comentario?.trim() || null;
 
@@ -248,11 +287,10 @@ export const useReviewsStore = create<ReviewsState>((set, get) => ({
         return;
       }
 
-      // Refrescar lista para reflejar el cambio
-      const userReview = get().userReview;
-      if (userReview) {
-        await get().fetchReviewsByExcursion(userReview.id_excursion);
-        updateGuideRating(userReview.id_excursion);
+      // Refrescar lista sin limpiar para evitar flash visual (I-01, I-02)
+      if (excursionId !== undefined) {
+        await get().fetchReviewsByExcursion(excursionId, true);
+        updateGuideRating(excursionId);
       }
 
       set({ loadingEdit: false });
