@@ -32,18 +32,22 @@ granatour-movil/
 │   │   └── forgot-password.tsx
 │   │
 │   ├── (tabs)/                   # Grupo: navegación principal con tabs
-│   │   ├── _layout.tsx           # Tab navigator (5 tabs)
+│   │   ├── _layout.tsx           # Tab navigator (5 tabs + 1 tab guía condicional)
 │   │   ├── index.tsx             # Tab 1: Home/Feed
 │   │   ├── explore.tsx           # Tab 2: Explorar excursiones
 │   │   ├── activity.tsx          # Tab 3: Tracking GPS
 │   │   ├── bookings.tsx          # Tab 4: Mis reservas
-│   │   └── profile.tsx           # Tab 5: Perfil usuario
+│   │   ├── profile.tsx           # Tab 5: Perfil usuario
+│   │   └── guide.tsx             # Tab 6: Panel guía (solo rol 'guia', href:null para otros)
 │   │
 │   ├── excursion/                # Stack screens para excursiones
 │   │   └── [id].tsx              # Detalle de excursión
 │   │
-│   └── booking/                  # Stack screens para reservas
-│       └── [id].tsx              # Detalle de reserva
+│   ├── booking/                  # Stack screens para reservas
+│   │   └── [id].tsx              # Detalle de reserva
+│   │
+│   └── guide-excursion/          # Stack screens para panel de guía (Fase 8)
+│       └── [id].tsx              # Reservas + tracking por excursión (solo guías)
 │
 ├── components/                   # Componentes reutilizables
 │   ├── ui/                       # Componentes UI genéricos
@@ -62,7 +66,8 @@ granatour-movil/
 │   ├── excursionsStore.ts        # Excursiones, filtros, búsqueda
 │   ├── bookingsStore.ts          # Reservas del usuario
 │   ├── activityStore.ts          # Tracking GPS, actividades
-│   └── reviewsStore.ts           # Valoraciones y reviews
+│   ├── reviewsStore.ts           # Valoraciones y reviews
+│   └── guideStore.ts             # Panel guía: excursiones asignadas, reservas (Fase 8)
 │
 ├── lib/                          # Utilidades y configuración
 │   ├── supabase.ts               # Cliente Supabase configurado
@@ -111,6 +116,7 @@ App abierta
 ### Stack Screens (se abren sobre los tabs)
 - `excursion/[id]` → Detalle de excursión (desde Explorar o Home)
 - `booking/[id]` → Detalle de reserva (desde Reservas)
+- `guide-excursion/[id]` → Reservas por excursión + tracking (desde Panel guía, solo rol 'guia')
 
 ## Paleta de Colores
 

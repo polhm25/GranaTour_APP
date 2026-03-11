@@ -17,7 +17,7 @@
 | 5 | GPS Tracking | ✅ COMPLETADA | 2026-03-10 |
 | 6 | Fotos geolocalizadas | ✅ COMPLETADA | 2026-03-10 |
 | 7 | Reviews y valoraciones | ✅ COMPLETADA | 2026-03-11 |
-| 8 | Panel guía | ⏳ Pendiente | - |
+| 8 | Panel guía | ✅ COMPLETADA | 2026-03-11 |
 | 9 | Notificaciones push | ⏳ Pendiente | - |
 | 10 | Modo offline | ⏳ Pendiente | - |
 | 11 | Perfil y estadísticas | ⏳ Pendiente | - |
@@ -374,6 +374,33 @@ lib/types.ts                   ← valoracion_media en ExcursionConGuia
 app/excursion/[id].tsx         ← sección Valoraciones integrada
 supabase/recalcular_valoracion_guia.sql ← RPC a ejecutar en Supabase SQL Editor
 ```
+
+---
+
+## FASE 8 - Panel guía ✅ COMPLETADA
+
+### Tareas completadas
+- [x] `stores/guideStore.ts` → store completo con fetchGuideExcursions, fetchExcursionBookings, updateBookingStatus
+- [x] `app/(tabs)/_layout.tsx` → Tab "Guía" añadida con `href: null` para no guías (condicional por rol)
+- [x] `app/(tabs)/guide.tsx` → Panel guía: lista de excursiones asignadas con conteos (pendiente/confirmada), useFocusEffect para recarga
+- [x] `app/guide-excursion/[id].tsx` → Detalle de excursión para guía: reservas con confirmar/cancelar, botón "Iniciar excursión" vinculado a activityStore, vista de participantes durante tracking
+- [x] `supabase/rls_guide_bookings.sql` → Políticas RLS para guías (SELECT y UPDATE de reservas de sus excursiones)
+
+### Criterio de éxito
+- [x] Guía ve sus excursiones asignadas en tab dedicado
+- [x] Puede gestionar reservas (pendiente → confirmada / cancelada con devolución de plazas)
+- [x] Puede iniciar tracking GPS vinculado a una excursión específica
+- [x] Vista de participantes confirmados durante tracking activo
+
+### Fase 8 (completada)
+```
+stores/guideStore.ts             ← fetchGuideExcursions, fetchExcursionBookings, updateBookingStatus
+app/(tabs)/_layout.tsx           ← tab Guía condicional (href: null para no guías)
+app/(tabs)/guide.tsx             ← panel guía con lista de excursiones y conteos
+app/guide-excursion/[id].tsx     ← reservas + confirmar/cancelar + iniciar tracking + participantes
+supabase/rls_guide_bookings.sql  ← ejecutar en Supabase SQL Editor
+```
+RLS Supabase requerido: `rls_guide_bookings.sql` (guías pueden leer y actualizar reservas de sus excursiones)
 
 ---
 
