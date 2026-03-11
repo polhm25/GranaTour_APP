@@ -4,6 +4,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Dimensions,
   FlatList,
   Image,
@@ -12,6 +13,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -21,11 +23,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ExcursionMapView } from '@/components/MapView';
 import { PhotoCapture } from '@/components/PhotoCapture';
+import { StarRating } from '@/components/StarRating';
+import { ReviewCard } from '@/components/ReviewCard';
 import { COLORS } from '@/lib/constants';
 import { formatDate, formatDuration, formatPrice, getDifficultyColor } from '@/lib/utils';
 import { useExcursionsStore } from '@/stores/excursionsStore';
 import { useBookingsStore } from '@/stores/bookingsStore';
 import { usePhotosStore } from '@/stores/photosStore';
+import { useReviewsStore } from '@/stores/reviewsStore';
+import { useAuthStore } from '@/stores/authStore';
 import type { Foto } from '@/lib/types';
 
 // Ancho de columna para la cuadrícula de 2 columnas
@@ -80,12 +86,42 @@ export default function ExcursionDetailScreen() {
   const fetchPhotosByExcursion = usePhotosStore((state) => state.fetchPhotosByExcursion);
   const clearExcursionPhotos = usePhotosStore((state) => state.clearExcursionPhotos);
 
+  // ── Store de reviews ──────────────────────────────────────────────────────
+  const { reviews, userReview, averageRating, userCanReview, loadingList: loadingReviews, loadingCreate: loadingCreateReview, loadingEdit: loadingEditReview, error: reviewsError } = useReviewsStore(
+    useShallow((state) => ({
+      reviews: state.reviews,
+      userReview: state.userReview,
+      averageRating: state.averageRating,
+      userCanReview: state.userCanReview,
+      loadingList: state.loadingList,
+      loadingCreate: state.loadingCreate,
+      loadingEdit: state.loadingEdit,
+      error: state.error,
+    }))
+  );
+
+  // Acciones del store de reviews — referencias estables
+  const fetchReviewsByExcursion = useReviewsStore((state) => state.fetchReviewsByExcursion);
+  const createReview = useReviewsStore((state) => state.createReview);
+  const editReview = useReviewsStore((state) => state.editReview);
+  const deleteReview = useReviewsStore((state) => state.deleteReview);
+  const clearReviews = useReviewsStore((state) => state.clearReviews);
+  const clearReviewsError = useReviewsStore((state) => state.clearError);
+
+  // Usuario autenticado para comparar con el autor de cada review
+  const currentUser = useAuthStore((state) => state.user);
+
   // ── Estado del booking sheet ──────────────────────────────────────────────
   const [showSheet, setShowSheet] = useState(false);
   const [numPersonas, setNumPersonas] = useState(1);
 
   // ── Estado del lightbox de fotos ──────────────────────────────────────────
   const [selectedPhoto, setSelectedPhoto] = useState<Foto | null>(null);
+
+  // ── Estado del formulario de review ──────────────────────────────────────
+  const [reviewStars, setReviewStars] = useState(5);
+  const [reviewComment, setReviewComment] = useState('');
+  const [editingReview, setEditingReview] = useState(false);
 
   // ── Carga al montar ─── I-06: getExcursionById incluido en deps ──────────
   useEffect(() => {
@@ -102,6 +138,21 @@ export default function ExcursionDetailScreen() {
     return () => clearExcursionPhotos();
   }, [excursionId, fetchPhotosByExcursion, clearExcursionPhotos]);
 
+  // ── Cargar reviews de la excursión ────────────────────────────────────────
+  useEffect(() => {
+    if (!isNaN(excursionId)) {
+      fetchReviewsByExcursion(excursionId);
+    }
+    return () => clearReviews();
+  }, [excursionId, fetchReviewsByExcursion, clearReviews]);
+
+  // ── Mostrar errores del store de reviews ──────────────────────────────────
+  useEffect(() => {
+    if (reviewsError) {
+      Alert.alert('Error', reviewsError, [{ text: 'OK', onPress: clearReviewsError }]);
+    }
+  }, [reviewsError, clearReviewsError]);
+
   // ── Callback tras subir foto en la galería ─────────────────────────────────
   const handlePhotoUploaded = useCallback(
     (_foto: Foto) => {
@@ -110,6 +161,46 @@ export default function ExcursionDetailScreen() {
     },
     [excursionId, fetchPhotosByExcursion]
   );
+
+  // ── Iniciar edición de la review propia ───────────────────────────────────
+  const handleEditReview = useCallback(() => {
+    if (!userReview) return;
+    setReviewStars(userReview.puntuacion);
+    setReviewComment(userReview.comentario ?? '');
+    setEditingReview(true);
+  }, [userReview]);
+
+  // ── Guardar nueva review o edición ───────────────────────────────────────
+  const handleSubmitReview = useCallback(async () => {
+    if (editingReview && userReview) {
+      await editReview(userReview.id_review, {
+        puntuacion: reviewStars,
+        comentario: reviewComment,
+      });
+      setEditingReview(false);
+    } else {
+      await createReview({
+        id_excursion: excursionId,
+        puntuacion: reviewStars,
+        comentario: reviewComment,
+      });
+      setReviewComment('');
+      setReviewStars(5);
+    }
+  }, [editingReview, userReview, editReview, createReview, excursionId, reviewStars, reviewComment]);
+
+  // ── Eliminar review propia ────────────────────────────────────────────────
+  const handleDeleteReview = useCallback(() => {
+    if (!userReview) return;
+    Alert.alert(
+      'Eliminar valoración',
+      '¿Seguro que quieres eliminar tu valoración?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Eliminar', style: 'destructive', onPress: () => deleteReview(userReview.id_review) },
+      ]
+    );
+  }, [userReview, deleteReview]);
 
   // ── Resetear personas al abrir el sheet ─── I-05: useCallback ───────────
   const openSheet = useCallback(() => {
@@ -431,6 +522,95 @@ export default function ExcursionDetailScreen() {
                 </TouchableOpacity>
               )}
             />
+          )}
+        </View>
+
+        {/* ── 7. Valoraciones ──────────────────────────────────────────────── */}
+        <View className="bg-neutral-200 mx-4" style={styles.separator} />
+        <View className="px-4 py-5">
+          {/* Cabecera con media */}
+          <View className="flex-row items-center justify-between mb-4">
+            <Text className="text-neutral-800 font-bold" style={styles.sectionTitle}>
+              Valoraciones
+            </Text>
+            {averageRating !== null && (
+              <View className="flex-row items-center">
+                <StarRating value={averageRating} size={16} showValue />
+                <Text className="text-neutral-400 ml-1" style={styles.reviewCount}>
+                  ({reviews.length})
+                </Text>
+              </View>
+            )}
+          </View>
+
+          {/* Formulario de nueva review o edición (solo si puede valorar o está editando) */}
+          {(userCanReview || editingReview) && (
+            <View className="bg-neutral-50 rounded-xl p-4 mb-4">
+              <Text className="text-neutral-700 font-semibold mb-3" style={styles.formLabel}>
+                {editingReview ? 'Editar tu valoración' : 'Tu valoración'}
+              </Text>
+              <StarRating
+                value={reviewStars}
+                onChange={setReviewStars}
+                size={32}
+              />
+              <TextInput
+                style={styles.reviewInput}
+                value={reviewComment}
+                onChangeText={setReviewComment}
+                placeholder="Añade un comentario (opcional)"
+                placeholderTextColor={COLORS.neutral[400]}
+                multiline
+                numberOfLines={3}
+                maxLength={500}
+              />
+              <View className="flex-row gap-2 mt-3">
+                {editingReview && (
+                  <TouchableOpacity
+                    style={[styles.reviewBtn, styles.cancelReviewBtn]}
+                    onPress={() => setEditingReview(false)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.cancelReviewBtnText}>Cancelar</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity
+                  style={[styles.reviewBtn, styles.submitReviewBtn, { flex: 1 }]}
+                  onPress={handleSubmitReview}
+                  disabled={loadingCreateReview || loadingEditReview}
+                  activeOpacity={0.8}
+                >
+                  {loadingCreateReview || loadingEditReview ? (
+                    <ActivityIndicator color="#fff" size="small" />
+                  ) : (
+                    <Text style={styles.submitReviewBtnText}>
+                      {editingReview ? 'Guardar cambios' : 'Publicar valoración'}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
+          {/* Lista de reviews */}
+          {loadingReviews ? (
+            <ActivityIndicator color={COLORS.primary[500]} />
+          ) : reviews.length === 0 ? (
+            <View className="items-center py-4">
+              <Text className="text-neutral-400 text-sm text-center">
+                Aún no hay valoraciones. ¡Sé el primero en valorar esta excursión!
+              </Text>
+            </View>
+          ) : (
+            reviews.map((review) => (
+              <ReviewCard
+                key={review.id_review}
+                review={review}
+                isOwn={review.id_usuario === currentUser?.id_usuario}
+                onEdit={review.id_usuario === currentUser?.id_usuario ? handleEditReview : undefined}
+                onDelete={review.id_usuario === currentUser?.id_usuario ? handleDeleteReview : undefined}
+              />
+            ))
           )}
         </View>
 
@@ -832,5 +1012,46 @@ const styles = StyleSheet.create({
   lightboxImage: {
     width: '100%',
     height: '80%',
+  },
+  // ── Reviews ───────────────────────────────────────────────────────────────
+  reviewCount: {
+    fontSize: 13,
+  },
+  formLabel: {
+    fontSize: 15,
+  },
+  reviewInput: {
+    borderWidth: 1,
+    borderColor: COLORS.neutral[200],
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 14,
+    color: COLORS.neutral[800],
+    marginTop: 12,
+    minHeight: 80,
+    textAlignVertical: 'top',
+  },
+  reviewBtn: {
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  cancelReviewBtn: {
+    backgroundColor: COLORS.neutral[100],
+    paddingHorizontal: 20,
+  },
+  cancelReviewBtnText: {
+    fontSize: 14,
+    color: COLORS.neutral[600],
+    fontWeight: '600',
+  },
+  submitReviewBtn: {
+    backgroundColor: COLORS.primary[500],
+  },
+  submitReviewBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#fff',
   },
 });
