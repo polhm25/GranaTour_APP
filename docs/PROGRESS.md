@@ -18,7 +18,7 @@
 | 6 | Fotos geolocalizadas | ✅ COMPLETADA | 2026-03-10 |
 | 7 | Reviews y valoraciones | ✅ COMPLETADA | 2026-03-11 |
 | 8 | Panel guía | ✅ COMPLETADA | 2026-03-11 |
-| 9 | Notificaciones push | ⏳ Pendiente | - |
+| 9 | Notificaciones push | ✅ COMPLETADA | 2026-03-11 |
 | 10 | Modo offline | ⏳ Pendiente | - |
 | 11 | Perfil y estadísticas | ⏳ Pendiente | - |
 | 12 | Polish final | ⏳ Pendiente | - |
@@ -401,6 +401,43 @@ app/guide-excursion/[id].tsx     ← reservas + confirmar/cancelar + iniciar tra
 supabase/rls_guide_bookings.sql  ← ejecutar en Supabase SQL Editor
 ```
 RLS Supabase requerido: `rls_guide_bookings.sql` (guías pueden leer y actualizar reservas de sus excursiones)
+
+---
+
+## FASE 9 - Notificaciones push ✅ COMPLETADA
+
+### Tareas completadas
+- [x] `npx expo install expo-notifications expo-device` instalado
+- [x] `app.json` → plugin expo-notifications con icono y color, permisos Android (RECEIVE_BOOT_COMPLETED, VIBRATE, POST_NOTIFICATIONS)
+- [x] `tsconfig.json` → excluye `supabase/functions/` de la compilación TypeScript (código Deno)
+- [x] `stores/pushStore.ts` → store sin persist: solicita permiso, obtiene ExpoPushToken, upsert en `push_tokens` por token, deactivateToken() al cerrar sesión
+- [x] `stores/bookingsStore.ts` → notificación local inmediata tras `createBooking` exitoso
+- [x] `stores/guideStore.ts` → envío de push a Edge Function al confirmar/cancelar reserva en `updateBookingStatus`
+- [x] `app/_layout.tsx` → registerPushToken + fetchUpcomingBookings + scheduleBookingReminders al autenticarse; deactivateToken + cancelAllScheduledNotifications al cerrar sesión; listener de notificaciones recibidas con cleanup
+- [x] `supabase/functions/send-push-notification/index.ts` → Edge Function Deno: lee tokens activos del cliente vía service role, llama a Expo Push API, retorna `{ sent, expo_response }`
+- [x] Fix: `fetchUpcomingBookings` filtra por `excursion.fecha_inicio` en el cliente (no por `fecha_reserva`)
+
+### Criterio de éxito
+- [x] Recibir notificación local al crear una reserva (simulador + dispositivo)
+- [x] Enviar notificación push al cliente al confirmar/cancelar reserva (dispositivo físico)
+- [x] Programar recordatorio 24h antes de excursión confirmada
+
+### Notas técnicas
+- Push tokens solo en dispositivos físicos (Device.isDevice); la lógica se salta silenciosamente en simuladores
+- Edge Function requiere despliegue: `supabase functions deploy send-push-notification`
+- Variables de entorno en Supabase Edge Function Secrets: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
+- La tabla `push_tokens` en Supabase debe existir (ver SCHEMA.md). Upsert por campo `token` (único)
+
+### Fase 9 (completada)
+```
+stores/pushStore.ts                                    ← registro de token, permisos, deactivate
+stores/bookingsStore.ts                               ← notificación local en createBooking
+stores/guideStore.ts                                  ← push a Edge Function en updateBookingStatus
+app/_layout.tsx                                       ← orquestación: token, recordatorios, listener
+supabase/functions/send-push-notification/index.ts    ← Edge Function Deno (despliegue manual)
+app.json                                              ← plugin expo-notifications + permisos Android
+tsconfig.json                                         ← excluye supabase/functions de tsc
+```
 
 ---
 

@@ -301,6 +301,24 @@
 - **Solución:** Actualizar manualmente `.expo/types/router.d.ts` añadiendo las nuevas rutas en los tres lugares: `hrefInputParams`, `hrefOutputParams`, `href`
 - **Aprendizaje:** Tras añadir nuevas rutas a `app/`, el archivo `.expo/types/router.d.ts` se regenera automáticamente en el próximo `npx expo start`. Para verificar TypeScript sin arrancar el servidor, actualizar el archivo manualmente o usar `router.push({ pathname: '/ruta/[id]', params: { id } })` con el tipo correcto
 
+## Errores Fase 9 - Notificaciones push
+
+### [FASE-9] fetchUpcomingBookings filtraba por fecha_reserva en lugar de fecha_inicio
+- **Fecha:** 2026-03-11
+- **Archivo(s):** `app/_layout.tsx`
+- **Error:** Los recordatorios nunca se programaban porque el filtro de rango de fechas usaba `fecha_reserva` (fecha en que se hizo la reserva) en vez de `excursion.fecha_inicio` (fecha de la excursión)
+- **Causa:** PostgREST no soporta filtros directos en tablas embebidas en la misma query (sin RPC). El filtro de fecha debía aplicarse en el cliente
+- **Solución:** Eliminar el filtro de fecha de la query Supabase. Obtener todas las reservas confirmadas y filtrar en JavaScript comparando `booking.excursion?.fecha_inicio` con el rango [now, now+48h]
+- **Aprendizaje:** Para filtrar por columnas de tablas relacionadas en Supabase, hacer el filtro en el cliente o usar una RPC. No asumir que `.gte('tabla_relacionada.campo', ...)` funciona en queries con JOIN embebido
+
+### [FASE-9] Edge Function Deno excluida del tsconfig para evitar errores de módulos
+- **Fecha:** 2026-03-11
+- **Archivo(s):** `tsconfig.json`, `supabase/functions/`
+- **Error:** `npx tsc --noEmit` fallaba con "Cannot find module 'https://deno.land/...'" y "Cannot find name 'Deno'"
+- **Causa:** Las Edge Functions de Supabase usan runtime Deno con imports de URL. El tsconfig del proyecto apunta a `**/*.ts` que incluía los archivos de la Edge Function
+- **Solución:** Añadir `"exclude": ["node_modules", "supabase/functions"]` al tsconfig.json
+- **Aprendizaje:** Al añadir Edge Functions (Deno) a un proyecto Node/React Native, siempre excluirlas del tsconfig principal. Cada Edge Function debería tener su propio `tsconfig.json` de Deno si se necesita validación de tipos
+
 ## Patrones de error recurrentes
 
 | Patrón | Descripción | Prevención |
