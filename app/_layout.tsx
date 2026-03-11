@@ -32,12 +32,9 @@ async function fetchUserProfile(authId: string): Promise<Usuario | null> {
   return data as Usuario;
 }
 
-// Obtiene las reservas confirmadas próximas del usuario autenticado
+// Obtiene las reservas confirmadas con excursiones en las próximas 48h
 async function fetchUpcomingBookings(idUsuario: number): Promise<ReservaConDetalles[]> {
-  // Rango: próximas 48h desde ahora
-  const now = new Date();
-  const in48h = new Date(now.getTime() + 48 * 60 * 60 * 1000);
-
+  // Obtener todas las reservas confirmadas con datos de excursión
   const { data, error } = await supabase
     .from('reservas')
     .select(`
@@ -45,16 +42,23 @@ async function fetchUpcomingBookings(idUsuario: number): Promise<ReservaConDetal
       excursion:excursiones(id_excursion, nombre_ruta, zona, fecha_inicio, imagen_url)
     `)
     .eq('id_usuario', idUsuario)
-    .eq('estado', 'confirmada')
-    .gte('fecha_reserva', now.toISOString())
-    .lte('fecha_reserva', in48h.toISOString());
+    .eq('estado', 'confirmada');
 
   if (error) {
     console.error('[GranaTour] fetchUpcomingBookings:', error);
     return [];
   }
 
-  return (data ?? []) as ReservaConDetalles[];
+  // Filtrar en el cliente: excursiones que empiezan en las próximas 48h
+  const now = new Date();
+  const in48h = new Date(now.getTime() + 48 * 60 * 60 * 1000);
+
+  return ((data ?? []) as ReservaConDetalles[]).filter((booking) => {
+    const fechaInicio = booking.excursion?.fecha_inicio;
+    if (!fechaInicio) return false;
+    const fecha = new Date(fechaInicio);
+    return fecha >= now && fecha <= in48h;
+  });
 }
 
 // Programa recordatorios locales para reservas próximas (24h antes)
