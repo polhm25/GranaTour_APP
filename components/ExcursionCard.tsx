@@ -1,9 +1,10 @@
 // Tarjeta de excursión para listas en la pantalla Explorar y Home.
-// Muestra imagen, badge de dificultad, stats y precio de la excursión.
+// Muestra imagen, badge de dificultad, stats, valoración media y precio de la excursión.
 
 import React from 'react';
 import { View, Text, Image, TouchableOpacity, StyleSheet } from 'react-native';
 import type { ExcursionConGuia } from '@/lib/types';
+import { COLORS } from '@/lib/constants';
 import { getDifficultyColor, formatPrice, formatDuration } from '@/lib/utils';
 
 // Etiquetas en español para cada nivel de dificultad
@@ -33,6 +34,7 @@ export function ExcursionCard({ excursion, onPress }: ExcursionCardProps) {
     precio_persona,
     plazas_disponibles,
     imagen_url,
+    valoracion_media,
   } = excursion;
 
   // Color de fondo del badge según dificultad
@@ -113,6 +115,16 @@ export function ExcursionCard({ excursion, onPress }: ExcursionCardProps) {
           )}
         </View>
 
+        {/* Media de valoraciones (si existe) */}
+        {valoracion_media !== null && valoracion_media !== undefined && (
+          <View className="flex-row items-center mb-2">
+            <Text style={styles.ratingText}>⭐ {valoracion_media.toFixed(1)}</Text>
+            <Text className="text-neutral-400 ml-1" style={styles.ratingCount}>
+              valoración
+            </Text>
+          </View>
+        )}
+
         {/* Fila inferior: precio y plazas disponibles */}
         <View className="flex-row items-center justify-between">
           {/* Precio por persona */}
@@ -174,6 +186,14 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   statText: {
+    fontSize: 12,
+  },
+  ratingText: {
+    fontSize: 13,
+    color: COLORS.neutral[700],
+    fontWeight: '600',
+  },
+  ratingCount: {
     fontSize: 12,
   },
   price: {
