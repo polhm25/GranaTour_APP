@@ -1,5 +1,4 @@
-// Tab 5: Perfil del usuario — galería personal de fotos (Fase 6)
-// Fases posteriores (11) añadirán estadísticas, edición de perfil y avatar
+// Tab 5: Perfil del usuario — estadísticas, edición de perfil, historial y galería (Fase 11)
 import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
@@ -9,60 +8,179 @@ import {
   Image,
   Modal,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { useShallow } from 'zustand/react/shallow';
+import * as ImagePicker from 'expo-image-picker';
 
 import { useAuth } from '@/hooks/useAuth';
 import { usePhotosStore } from '@/stores/photosStore';
+import { useActivityStore } from '@/stores/activityStore';
+import { useProfileStore } from '@/stores/profileStore';
+import { ActivityChart } from '@/components/ui/ActivityChart';
+import { ActivityCard } from '@/components/ActivityCard';
 import { PhotoCapture } from '@/components/PhotoCapture';
 import { COLORS } from '@/lib/constants';
 import type { Foto } from '@/lib/types';
 
-// Ancho de columna para la cuadrícula de 3 columnas
+// ─── Constantes ────────────────────────────────────────────────────────────────
+
 const SCREEN_WIDTH = Dimensions.get('window').width;
-const PHOTO_SIZE = (SCREEN_WIDTH - 4) / 3; // 3 columnas con 2px de gap entre ellas
+const PHOTO_SIZE = (SCREEN_WIDTH - 4) / 3; // cuadrícula 3 columnas con 2px de gap
+
+// Actividades recientes a mostrar en el perfil (sin paginar)
+const RECENT_ACTIVITIES_LIMIT = 5;
+
+// ─── Componente auxiliar: tarjeta de estadística ──────────────────────────────
+
+interface StatCardProps {
+  value: string;
+  label: string;
+  icon: string;
+}
+
+function StatCard({ value, label, icon }: StatCardProps) {
+  return (
+    <View style={styles.statCard}>
+      <Text style={styles.statIcon}>{icon}</Text>
+      <Text className="text-xl font-bold text-neutral-800 mt-1">{value}</Text>
+      <Text className="text-xs text-neutral-500 mt-0.5 text-center">{label}</Text>
+    </View>
+  );
+}
+
+// ─── Pantalla principal ────────────────────────────────────────────────────────
 
 export default function ProfileScreen() {
   const { user } = useAuth();
 
-  // Store de fotos — estado separado por contexto (C-02)
-  const { photos, loading, uploading, error } = usePhotosStore(
+  // ── Stores ──────────────────────────────────────────────────────────────────
+  const { photos, loadingPhotos, uploading, photoError } = usePhotosStore(
     useShallow((state) => ({
       photos: state.myPhotos,
-      loading: state.loadingMy,
+      loadingPhotos: state.loadingMy,
       uploading: state.uploading,
-      error: state.error,
+      photoError: state.error,
     }))
   );
-
-  // Acciones con referencias estables — fuera de useShallow (I-02)
   const fetchMyPhotos = usePhotosStore((state) => state.fetchMyPhotos);
   const deletePhoto = usePhotosStore((state) => state.deletePhoto);
-  const clearError = usePhotosStore((state) => state.clearError);
+  const clearPhotoError = usePhotosStore((state) => state.clearError);
 
-  // Foto seleccionada para el lightbox
+  const { activities, loadingActivities } = useActivityStore(
+    useShallow((state) => ({
+      activities: state.activities,
+      loadingActivities: state.loading,
+    }))
+  );
+  const fetchActivities = useActivityStore((state) => state.fetchActivities);
+
+  const { activityCount, chartData, loadingUpdate, loadingAvatar, profileError } = useProfileStore(
+    useShallow((state) => ({
+      activityCount: state.activityCount,
+      chartData: state.chartData,
+      loadingUpdate: state.loadingUpdate,
+      loadingAvatar: state.loadingAvatar,
+      profileError: state.error,
+    }))
+  );
+  const updateProfile = useProfileStore((state) => state.updateProfile);
+  const uploadAvatar = useProfileStore((state) => state.uploadAvatar);
+  const fetchActivityStats = useProfileStore((state) => state.fetchActivityStats);
+  const fetchActivityChart = useProfileStore((state) => state.fetchActivityChart);
+  const clearProfileError = useProfileStore((state) => state.clearError);
+
+  // ── Estado local ─────────────────────────────────────────────────────────────
   const [selectedPhoto, setSelectedPhoto] = useState<Foto | null>(null);
+  const [editModalVisible, setEditModalVisible] = useState(false);
 
-  // Cargar fotos al enfocar la pestaña
+  // Campos del formulario de edición
+  const [editNombre, setEditNombre] = useState('');
+  const [editBio, setEditBio] = useState('');
+  const [editTelefono, setEditTelefono] = useState('');
+
+  // ── Carga de datos al enfocar la pestaña ─────────────────────────────────────
   useFocusEffect(
     useCallback(() => {
       fetchMyPhotos();
-    }, [fetchMyPhotos])
+      fetchActivities();
+      fetchActivityStats();
+      fetchActivityChart();
+    }, [fetchMyPhotos, fetchActivities, fetchActivityStats, fetchActivityChart])
   );
 
-  // Mostrar error como alerta
+  // ── Alertas de error ─────────────────────────────────────────────────────────
   React.useEffect(() => {
-    if (error) {
-      Alert.alert('Error', error, [{ text: 'OK', onPress: clearError }]);
+    if (photoError) {
+      Alert.alert('Error', photoError, [{ text: 'OK', onPress: clearPhotoError }]);
     }
-  }, [error, clearError]);
+  }, [photoError, clearPhotoError]);
 
-  // Callback cuando se sube una nueva foto desde el perfil
+  React.useEffect(() => {
+    if (profileError) {
+      Alert.alert('Error', profileError, [{ text: 'OK', onPress: clearProfileError }]);
+    }
+  }, [profileError, clearProfileError]);
+
+  // ── Abrir modal de edición prellenado ────────────────────────────────────────
+  const handleOpenEdit = useCallback(() => {
+    if (!user) return;
+    setEditNombre(user.nombre);
+    setEditBio(user.bio ?? '');
+    setEditTelefono(user.telefono ?? '');
+    setEditModalVisible(true);
+  }, [user]);
+
+  // ── Guardar cambios del perfil ───────────────────────────────────────────────
+  const handleSaveProfile = useCallback(async () => {
+    const nombre = editNombre.trim();
+    if (!nombre) {
+      Alert.alert('Error', 'El nombre no puede estar vacío');
+      return;
+    }
+    const success = await updateProfile({
+      nombre,
+      bio: editBio.trim() || null,
+      telefono: editTelefono.trim() || null,
+    });
+    if (success) {
+      setEditModalVisible(false);
+    }
+  }, [editNombre, editBio, editTelefono, updateProfile]);
+
+  // ── Seleccionar y subir avatar ───────────────────────────────────────────────
+  const handlePickAvatar = useCallback(async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert(
+        'Permiso denegado',
+        'Se necesita acceso a la galería para cambiar el avatar'
+      );
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+
+    if (result.canceled || !result.assets[0]) return;
+
+    const success = await uploadAvatar(result.assets[0].uri);
+    if (success) {
+      Alert.alert('Avatar actualizado', 'Tu foto de perfil se ha actualizado correctamente');
+    }
+  }, [uploadAvatar]);
+
+  // ── Fotos: subida y eliminación ──────────────────────────────────────────────
   const handlePhotoUploaded = useCallback(
     (_foto: Foto) => {
       fetchMyPhotos();
@@ -70,7 +188,6 @@ export default function ProfileScreen() {
     [fetchMyPhotos]
   );
 
-  // Eliminar foto con confirmación (long press o botón en lightbox)
   const handleDeletePhoto = useCallback(
     (foto: Foto) => {
       Alert.alert(
@@ -83,9 +200,7 @@ export default function ProfileScreen() {
             style: 'destructive',
             onPress: async () => {
               const success = await deletePhoto(foto.id_foto, foto.url_storage);
-              if (success) {
-                setSelectedPhoto(null);
-              }
+              if (success) setSelectedPhoto(null);
             },
           },
         ]
@@ -94,7 +209,17 @@ export default function ProfileScreen() {
     [deletePhoto]
   );
 
-  // ── Renderizado de cada foto en la cuadrícula ─────────────────────────────
+  // ── Formateo de estadísticas ─────────────────────────────────────────────────
+  const totalKmLabel = user
+    ? user.total_km >= 1000
+      ? `${(user.total_km / 1000).toFixed(1)}k`
+      : user.total_km.toFixed(1)
+    : '—';
+
+  // Actividades recientes (máximo RECENT_ACTIVITIES_LIMIT)
+  const recentActivities = activities.slice(0, RECENT_ACTIVITIES_LIMIT);
+
+  // ── Renderizado de fotos ─────────────────────────────────────────────────────
   const renderPhotoItem = useCallback(
     ({ item }: { item: Foto }) => (
       <TouchableOpacity
@@ -111,83 +236,276 @@ export default function ProfileScreen() {
 
   const keyExtractor = useCallback((item: Foto) => String(item.id_foto), []);
 
-  // ── Render ─────────────────────────────────────────────────────────────────
+  // ─── Render ──────────────────────────────────────────────────────────────────
 
   return (
     <View className="flex-1 bg-gray-50">
-      {/* Header */}
-      <View className="bg-white border-b border-gray-100 pt-14 pb-4 px-5">
-        <Text className="text-2xl font-bold text-neutral-800">Perfil</Text>
-        {user && (
-          <Text className="text-neutral-500 mt-1" style={styles.userName}>
-            {user.nombre} {user.ap1}
-          </Text>
-        )}
-      </View>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
+        {/* ─── CABECERA: Avatar + nombre + bio ────────────────────────────────── */}
+        <View style={styles.headerCard}>
+          {/* Avatar con botón de edición superpuesto */}
+          <View className="items-center mb-4">
+            <View style={styles.avatarContainer}>
+              {loadingAvatar ? (
+                <View style={styles.avatarPlaceholder}>
+                  <ActivityIndicator color={COLORS.primary[500]} />
+                </View>
+              ) : user?.avatar_url ? (
+                <Image
+                  source={{ uri: user.avatar_url }}
+                  style={styles.avatar}
+                  resizeMode="cover"
+                />
+              ) : (
+                <View style={styles.avatarPlaceholder}>
+                  <Text style={styles.avatarInitials}>
+                    {user ? `${user.nombre[0]}${user.ap1[0]}`.toUpperCase() : '?'}
+                  </Text>
+                </View>
+              )}
+              {/* Botón cambiar avatar */}
+              <TouchableOpacity
+                style={styles.avatarEditButton}
+                onPress={handlePickAvatar}
+                activeOpacity={0.85}
+                disabled={loadingAvatar}
+              >
+                <Text style={styles.avatarEditIcon}>📷</Text>
+              </TouchableOpacity>
+            </View>
 
-      {/* Sección mis fotos */}
-      <View className="flex-1">
-        {/* Cabecera de la sección con botón para añadir foto */}
-        <View className="flex-row items-center justify-between px-4 pt-5 pb-3">
-          <View>
-            <Text className="text-neutral-800 font-bold" style={styles.sectionTitle}>
-              Mis fotos
+            {/* Nombre y rol */}
+            <Text className="text-xl font-bold text-neutral-800 mt-3">
+              {user ? `${user.nombre} ${user.ap1}` : '—'}
             </Text>
-            <Text className="text-neutral-400 mt-0.5" style={styles.sectionSubtitle}>
-              {photos.length > 0
-                ? `${photos.length} ${photos.length === 1 ? 'foto' : 'fotos'}`
-                : 'Sin fotos todavía'}
-            </Text>
+            {user?.rol === 'guia' && (
+              <View className="mt-1 px-3 py-0.5 rounded-full bg-secondary-100">
+                <Text className="text-xs font-semibold text-secondary-700">Guía</Text>
+              </View>
+            )}
+
+            {/* Bio */}
+            {user?.bio ? (
+              <Text className="text-sm text-neutral-500 mt-2 text-center px-6">
+                {user.bio}
+              </Text>
+            ) : (
+              <Text className="text-sm text-neutral-400 mt-2 italic">
+                Sin descripción
+              </Text>
+            )}
+
+            {/* Email */}
+            <Text className="text-xs text-neutral-400 mt-1">{user?.email ?? ''}</Text>
           </View>
-          <PhotoCapture onPhotoUploaded={handlePhotoUploaded} />
+
+          {/* Botón editar perfil */}
+          <TouchableOpacity
+            style={styles.editButton}
+            onPress={handleOpenEdit}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.editButtonText}>Editar perfil</Text>
+          </TouchableOpacity>
         </View>
 
-        {/* Indicador de subida */}
-        {uploading && (
-          <View className="flex-row items-center px-4 py-2 bg-primary-50 mx-4 rounded-lg mb-3">
-            <ActivityIndicator size="small" color={COLORS.primary[500]} />
-            <Text className="ml-2 text-primary-700" style={styles.uploadingText}>
-              Subiendo foto...
-            </Text>
+        {/* ─── ESTADÍSTICAS ────────────────────────────────────────────────────── */}
+        <View className="mx-4 mb-4">
+          <Text className="text-base font-bold text-neutral-800 mb-3">Mis estadísticas</Text>
+          <View className="flex-row gap-3">
+            <StatCard
+              icon="🏔️"
+              value={`${totalKmLabel} km`}
+              label="Kilómetros totales"
+            />
+            <StatCard
+              icon="🗺️"
+              value={String(user?.total_excursiones ?? 0)}
+              label="Excursiones"
+            />
+            <StatCard
+              icon="📍"
+              value={String(activityCount)}
+              label="Actividades GPS"
+            />
           </View>
-        )}
+        </View>
 
-        {/* Contenido: loading, vacío o cuadrícula */}
-        {loading && photos.length === 0 ? (
-          <ActivityIndicator
-            color={COLORS.primary[500]}
-            size="large"
-            style={{ marginTop: 40 }}
-          />
-        ) : photos.length === 0 ? (
-          <View className="flex-1 items-center justify-center px-8">
-            <Text className="text-5xl mb-4">📷</Text>
-            <Text className="text-neutral-600 font-semibold text-base text-center">
-              Aún no has subido fotos
-            </Text>
-            <Text className="text-neutral-400 text-sm text-center mt-2">
-              Toma fotos durante tus rutas o desde el detalle de una excursión
-            </Text>
+        {/* ─── GRÁFICO ÚLTIMOS 30 DÍAS ─────────────────────────────────────────── */}
+        <View style={styles.chartCard}>
+          <View className="flex-row items-center justify-between mb-3">
+            <Text className="text-base font-bold text-neutral-800">Actividad reciente</Text>
+            <Text className="text-xs text-neutral-400">Últimos 30 días</Text>
           </View>
-        ) : (
-          <FlatList
-            data={photos}
-            keyExtractor={keyExtractor}
-            renderItem={renderPhotoItem}
-            numColumns={3}
-            contentContainerStyle={styles.gridContainer}
-            showsVerticalScrollIndicator={false}
-            // Mantener cuadrícula estable
-            getItemLayout={(_data, index) => ({
-              length: PHOTO_SIZE,
-              offset: PHOTO_SIZE * Math.floor(index / 3),
-              index,
-            })}
-          />
-        )}
-      </View>
+          <ActivityChart data={chartData} />
+        </View>
 
-      {/* Lightbox — vista ampliada de la foto seleccionada */}
+        {/* ─── HISTORIAL DE ACTIVIDADES ────────────────────────────────────────── */}
+        <View className="mx-4 mb-4">
+          <Text className="text-base font-bold text-neutral-800 mb-3">Últimas actividades</Text>
+
+          {loadingActivities && activities.length === 0 ? (
+            <ActivityIndicator color={COLORS.primary[500]} style={{ marginVertical: 20 }} />
+          ) : recentActivities.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text className="text-3xl mb-2">📍</Text>
+              <Text className="text-sm text-neutral-500 text-center">
+                Aún no has registrado actividades GPS
+              </Text>
+            </View>
+          ) : (
+            <>
+              {recentActivities.map((actividad) => (
+                <ActivityCard key={actividad.id_actividad} actividad={actividad} />
+              ))}
+              {activities.length > RECENT_ACTIVITIES_LIMIT && (
+                <Text className="text-xs text-neutral-400 text-center mt-1">
+                  Ver más en la pestaña Actividad
+                </Text>
+              )}
+            </>
+          )}
+        </View>
+
+        {/* ─── GALERÍA DE FOTOS ────────────────────────────────────────────────── */}
+        <View className="mx-4 mb-8">
+          <View className="flex-row items-center justify-between mb-3">
+            <View>
+              <Text className="text-base font-bold text-neutral-800">Mis fotos</Text>
+              <Text className="text-xs text-neutral-400 mt-0.5">
+                {photos.length > 0
+                  ? `${photos.length} ${photos.length === 1 ? 'foto' : 'fotos'}`
+                  : 'Sin fotos todavía'}
+              </Text>
+            </View>
+            <PhotoCapture onPhotoUploaded={handlePhotoUploaded} />
+          </View>
+
+          {/* Indicador de subida */}
+          {uploading && (
+            <View className="flex-row items-center px-3 py-2 bg-primary-50 rounded-lg mb-3">
+              <ActivityIndicator size="small" color={COLORS.primary[500]} />
+              <Text className="ml-2 text-primary-700 text-sm">Subiendo foto...</Text>
+            </View>
+          )}
+
+          {loadingPhotos && photos.length === 0 ? (
+            <ActivityIndicator color={COLORS.primary[500]} style={{ marginVertical: 20 }} />
+          ) : photos.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text className="text-3xl mb-2">📷</Text>
+              <Text className="text-sm text-neutral-500 text-center">
+                Aún no has subido fotos
+              </Text>
+              <Text className="text-xs text-neutral-400 text-center mt-1">
+                Toma fotos durante tus rutas o desde una excursión
+              </Text>
+            </View>
+          ) : (
+            <FlatList
+              data={photos}
+              keyExtractor={keyExtractor}
+              renderItem={renderPhotoItem}
+              numColumns={3}
+              contentContainerStyle={styles.photoGrid}
+              scrollEnabled={false}
+              getItemLayout={(_data, index) => ({
+                length: PHOTO_SIZE,
+                offset: PHOTO_SIZE * Math.floor(index / 3),
+                index,
+              })}
+            />
+          )}
+        </View>
+      </ScrollView>
+
+      {/* ─── MODAL: Editar perfil ─────────────────────────────────────────────── */}
+      <Modal
+        visible={editModalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setEditModalVisible(false)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setEditModalVisible(false)}
+        >
+          <Pressable
+            style={styles.editModal}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <Text style={styles.modalTitle}>Editar perfil</Text>
+
+            {/* Nombre */}
+            <Text style={styles.fieldLabel}>Nombre *</Text>
+            <TextInput
+              style={styles.input}
+              value={editNombre}
+              onChangeText={setEditNombre}
+              placeholder="Tu nombre"
+              placeholderTextColor={COLORS.neutral[400]}
+              autoCapitalize="words"
+              returnKeyType="next"
+            />
+
+            {/* Teléfono */}
+            <Text style={styles.fieldLabel}>Teléfono</Text>
+            <TextInput
+              style={styles.input}
+              value={editTelefono}
+              onChangeText={setEditTelefono}
+              placeholder="+34 600 000 000"
+              placeholderTextColor={COLORS.neutral[400]}
+              keyboardType="phone-pad"
+              returnKeyType="next"
+            />
+
+            {/* Bio */}
+            <Text style={styles.fieldLabel}>Sobre ti</Text>
+            <TextInput
+              style={[styles.input, styles.inputMultiline]}
+              value={editBio}
+              onChangeText={setEditBio}
+              placeholder="Cuéntanos algo sobre ti..."
+              placeholderTextColor={COLORS.neutral[400]}
+              multiline
+              numberOfLines={3}
+              textAlignVertical="top"
+              returnKeyType="done"
+            />
+
+            {/* Botones */}
+            <View className="flex-row gap-3 mt-2">
+              <TouchableOpacity
+                style={[styles.modalButton, styles.cancelButton]}
+                onPress={() => setEditModalVisible(false)}
+                activeOpacity={0.85}
+                disabled={loadingUpdate}
+              >
+                <Text style={styles.cancelButtonText}>Cancelar</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.modalButton, styles.saveButton]}
+                onPress={handleSaveProfile}
+                activeOpacity={0.85}
+                disabled={loadingUpdate}
+              >
+                {loadingUpdate ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={styles.saveButtonText}>Guardar</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* ─── MODAL: Lightbox de fotos ─────────────────────────────────────────── */}
       <Modal
         visible={selectedPhoto !== null}
         transparent
@@ -195,7 +513,6 @@ export default function ProfileScreen() {
         onRequestClose={() => setSelectedPhoto(null)}
       >
         <View style={styles.lightboxOverlay}>
-          {/* Imagen a pantalla completa */}
           {selectedPhoto && (
             <Pressable
               style={styles.lightboxImageContainer}
@@ -209,9 +526,7 @@ export default function ProfileScreen() {
             </Pressable>
           )}
 
-          {/* Controles del lightbox */}
           <View style={styles.lightboxControls}>
-            {/* Fecha de la foto */}
             {selectedPhoto && (
               <Text style={styles.lightboxDate}>
                 {new Date(selectedPhoto.fecha).toLocaleDateString('es-ES', {
@@ -221,8 +536,6 @@ export default function ProfileScreen() {
                 })}
               </Text>
             )}
-
-            {/* Botón eliminar */}
             <TouchableOpacity
               style={styles.deleteButton}
               onPress={() => selectedPhoto && handleDeletePhoto(selectedPhoto)}
@@ -232,13 +545,12 @@ export default function ProfileScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* Botón cerrar */}
           <TouchableOpacity
-            style={styles.closeButton}
+            style={styles.lightboxCloseButton}
             onPress={() => setSelectedPhoto(null)}
             activeOpacity={0.8}
           >
-            <Text style={styles.closeButtonText}>✕</Text>
+            <Text style={styles.lightboxCloseText}>✕</Text>
           </TouchableOpacity>
         </View>
       </Modal>
@@ -249,22 +561,124 @@ export default function ProfileScreen() {
 // ─── Estilos ──────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  userName: {
-    fontSize: 15,
+  scrollContent: {
+    paddingTop: 56, // espacio para el status bar
   },
-  sectionTitle: {
-    fontSize: 18,
+
+  // ── Cabecera de perfil ────────────────────────────────────────────────────
+  headerCard: {
+    backgroundColor: '#fff',
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 16,
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
   },
-  sectionSubtitle: {
+
+  // ── Avatar ────────────────────────────────────────────────────────────────
+  avatarContainer: {
+    position: 'relative',
+    width: 96,
+    height: 96,
+  },
+  avatar: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: COLORS.neutral[100],
+  },
+  avatarPlaceholder: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: COLORS.primary[100],
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarInitials: {
+    fontSize: 32,
+    fontWeight: '700',
+    color: COLORS.primary[600],
+  },
+  avatarEditButton: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: COLORS.primary[500],
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
+  avatarEditIcon: {
     fontSize: 13,
   },
-  uploadingText: {
-    fontSize: 14,
+
+  // ── Botón editar perfil ───────────────────────────────────────────────────
+  editButton: {
+    backgroundColor: COLORS.primary[500],
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  editButtonText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+
+  // ── Tarjeta de estadística ────────────────────────────────────────────────
+  statCard: {
+    flex: 1,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  statIcon: {
+    fontSize: 22,
+  },
+
+  // ── Gráfico ───────────────────────────────────────────────────────────────
+  chartCard: {
+    backgroundColor: '#fff',
+    marginHorizontal: 16,
+    marginBottom: 16,
+    borderRadius: 16,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+
+  // ── Estado vacío genérico ─────────────────────────────────────────────────
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 20,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    marginBottom: 4,
   },
 
   // ── Cuadrícula de fotos ───────────────────────────────────────────────────
-  gridContainer: {
-    paddingBottom: 24,
+  photoGrid: {
+    paddingBottom: 4,
   },
   photoItem: {
     width: PHOTO_SIZE,
@@ -274,6 +688,70 @@ const styles = StyleSheet.create({
   photoImage: {
     width: '100%',
     height: '100%',
+  },
+
+  // ── Modal de edición ──────────────────────────────────────────────────────
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end',
+  },
+  editModal: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 24,
+    paddingBottom: 40,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: COLORS.neutral[800],
+    marginBottom: 20,
+  },
+  fieldLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.neutral[600],
+    marginBottom: 6,
+    marginTop: 12,
+  },
+  input: {
+    backgroundColor: COLORS.neutral[50],
+    borderWidth: 1,
+    borderColor: COLORS.neutral[200],
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    fontSize: 15,
+    color: COLORS.neutral[800],
+  },
+  inputMultiline: {
+    height: 80,
+    paddingTop: 10,
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  cancelButton: {
+    backgroundColor: COLORS.neutral[100],
+  },
+  cancelButtonText: {
+    color: COLORS.neutral[600],
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  saveButton: {
+    backgroundColor: COLORS.primary[500],
+  },
+  saveButtonText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
   },
 
   // ── Lightbox ──────────────────────────────────────────────────────────────
@@ -314,7 +792,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-  closeButton: {
+  lightboxCloseButton: {
     position: 'absolute',
     top: 56,
     right: 20,
@@ -325,7 +803,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  closeButtonText: {
+  lightboxCloseText: {
     color: '#fff',
     fontSize: 18,
     fontWeight: '700',

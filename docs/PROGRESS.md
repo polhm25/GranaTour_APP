@@ -20,7 +20,7 @@
 | 8 | Panel guía | ✅ COMPLETADA | 2026-03-11 |
 | 9 | Notificaciones push | ✅ COMPLETADA | 2026-03-11 |
 | 10 | Modo offline | ✅ COMPLETADA | 2026-03-27 |
-| 11 | Perfil y estadísticas | ⏳ Pendiente | - |
+| 11 | Perfil y estadísticas | ✅ COMPLETADA | 2026-03-27 |
 | 12 | Polish final | ⏳ Pendiente | - |
 
 ---
@@ -478,6 +478,39 @@ app/_layout.tsx                  ← listener red + procesado cola al reconectar
 app/(tabs)/index.tsx             ← OfflineBanner integrado
 app/(tabs)/explore.tsx           ← OfflineBanner integrado
 app/(tabs)/bookings.tsx          ← OfflineBanner integrado
+```
+
+---
+
+## FASE 11 - Perfil y estadísticas ✅ COMPLETADA
+
+### Tareas completadas
+- [x] `stores/profileStore.ts` → updateProfile, uploadAvatar, fetchActivityStats, fetchActivityChart
+- [x] `components/ui/ActivityChart.tsx` → gráfico de barras custom (sin librerías extra) para últimos 30 días
+- [x] `app/(tabs)/profile.tsx` → pantalla completa con:
+  - Avatar editable (bucket avatars, upsert con cache-busting)
+  - Header: avatar, nombre, rol badge, bio, email
+  - Modal de edición: nombre, bio, teléfono
+  - Stats: total_km, total_excursiones, activityCount (query COUNT)
+  - Gráfico de actividad (últimos 30 días agrupados por día)
+  - Historial de últimas 5 actividades GPS (ActivityCard)
+  - Galería personal de fotos 3 columnas con lightbox
+- [x] `tsc --noEmit` sin errores
+- [x] Fix: `mediaTypes: ['images']` (API nuevo expo-image-picker 17.x, no MediaTypeOptions)
+
+### Criterio de éxito
+- [x] Editar nombre, bio y teléfono desde modal
+- [x] Cambiar avatar desde galería del dispositivo
+- [x] Ver stats: total km, excursiones, actividades tracking
+- [x] Gráfico de barras con actividad de los últimos 30 días
+- [x] Últimas actividades GPS en el perfil
+- [x] Galería personal con lightbox y borrado
+
+### Fase 11 (completada)
+```
+stores/profileStore.ts           ← updateProfile, uploadAvatar, fetchActivityStats, fetchActivityChart
+components/ui/ActivityChart.tsx  ← gráfico barras custom, últimos 30 días, sin librerías extra
+app/(tabs)/profile.tsx           ← pantalla completa perfil con todas las secciones
 ```
 
 ---
