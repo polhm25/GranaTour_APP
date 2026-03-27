@@ -9,6 +9,9 @@ module.exports = {
 
   presets: [require('nativewind/preset')],
 
+  // Responde al color scheme del sistema (dark mode automático)
+  darkMode: 'media',
+
   theme: {
     extend: {
       colors: {

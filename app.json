@@ -56,6 +56,7 @@
     "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": true,
+      "bundleIdentifier": "com.granatour.app",
       "infoPlist": {
         "NSCameraUsageDescription": "GranaTour necesita la cámara para capturar fotos durante el tracking y asociarlas a excursiones.",
         "NSPhotoLibraryUsageDescription": "GranaTour necesita acceso a tus fotos para subir imágenes a excursiones.",
@@ -64,6 +65,7 @@
       }
     },
     "android": {
+      "package": "com.granatour.app",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"

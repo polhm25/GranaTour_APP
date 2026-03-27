@@ -19,6 +19,7 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useShallow } from 'zustand/react/shallow';
+import * as Haptics from 'expo-haptics';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ExcursionMapView } from '@/components/MapView';
@@ -231,6 +232,8 @@ export default function ExcursionDetailScreen() {
     });
 
     if (result) {
+      // Haptic de éxito al confirmar la reserva
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setShowSheet(false);
       // Navegar a la pestaña de reservas para ver la nueva reserva
       router.replace('/(tabs)/bookings');

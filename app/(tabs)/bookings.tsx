@@ -1,7 +1,6 @@
 // Tab 4: Mis reservas — lista de reservas del usuario con tabs de estado
 import React, { useState, useCallback, useMemo } from 'react';
 import {
-  ActivityIndicator,
   FlatList,
   Image,
   StyleSheet,
@@ -18,6 +17,7 @@ import { COLORS } from '@/lib/constants';
 import { formatDate, formatPrice } from '@/lib/utils';
 import { useBookingsStore } from '@/stores/bookingsStore';
 import { OfflineBanner } from '@/components/ui/OfflineBanner';
+import { BookingCardSkeleton } from '@/components/ui/SkeletonLoader';
 import type { EstadoReserva, ReservaConDetalles } from '@/lib/types';
 
 // ─── Tabs de filtro ───────────────────────────────────────────────────────────
@@ -212,13 +212,12 @@ export default function BookingsScreen() {
         </View>
       ) : null}
 
-      {/* Loading */}
+      {/* Skeletons durante la carga inicial */}
       {loadingList && bookings.length === 0 ? (
-        <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color={COLORS.primary[500]} />
-          <Text className="text-neutral-500 mt-3" style={styles.loadingText}>
-            Cargando reservas...
-          </Text>
+        <View className="px-4 pt-2">
+          <BookingCardSkeleton />
+          <BookingCardSkeleton />
+          <BookingCardSkeleton />
         </View>
       ) : (
         <FlatList
@@ -334,9 +333,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   emptyButton: {
-    fontSize: 14,
-  },
-  loadingText: {
     fontSize: 14,
   },
 });

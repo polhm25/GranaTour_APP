@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import { useShallow } from 'zustand/react/shallow';
 
@@ -241,6 +242,7 @@ export default function GuideExcursionScreen() {
           {
             text: 'Confirmar',
             onPress: () => {
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
               // I7: No async en onPress de Alert; gestionar la promesa explícitamente
               updateBookingStatus(
                 booking.id_reserva,

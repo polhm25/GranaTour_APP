@@ -3,7 +3,6 @@
 
 import React, { useEffect } from 'react';
 import {
-  ActivityIndicator,
   ScrollView,
   StyleSheet,
   Text,
@@ -16,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ExcursionCard } from '@/components/ExcursionCard';
 import { OfflineBanner } from '@/components/ui/OfflineBanner';
+import { ExcursionCardSkeleton } from '@/components/ui/SkeletonLoader';
 import { COLORS } from '@/lib/constants';
 import type { ExcursionConGuia } from '@/lib/types';
 import { useExcursionsStore } from '@/stores/excursionsStore';
@@ -80,18 +80,18 @@ export default function HomeScreen() {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <SafeAreaView className="flex-1 bg-neutral-50">
+    <SafeAreaView className="flex-1 bg-neutral-50 dark:bg-neutral-900">
       <OfflineBanner />
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
         {/* ── Header con saludo ───────────────────────────────────────── */}
-        <View className="px-4 pt-6 pb-4 bg-white border-b border-neutral-200">
-          <Text className="text-neutral-800 font-bold" style={styles.greeting}>
+        <View className="px-4 pt-6 pb-4 bg-white dark:bg-neutral-800 border-b border-neutral-200 dark:border-neutral-700">
+          <Text className="text-neutral-800 dark:text-neutral-100 font-bold" style={styles.greeting}>
             ¡Hola, {greetingName}!
           </Text>
-          <Text className="text-neutral-500 mt-1" style={styles.subGreeting}>
+          <Text className="text-neutral-500 dark:text-neutral-400 mt-1" style={styles.subGreeting}>
             ¿A dónde vamos hoy?
           </Text>
         </View>
@@ -165,11 +165,9 @@ export default function HomeScreen() {
           {loadingUpcoming && upcomingExcursions.length === 0 ? (
             // Skeletons verticales durante la carga
             <View className="px-4">
-              <ActivityIndicator
-                size="large"
-                color={COLORS.primary[500]}
-                style={styles.loadingIndicator}
-              />
+              <ExcursionCardSkeleton />
+              <ExcursionCardSkeleton />
+              <ExcursionCardSkeleton />
             </View>
           ) : upcomingExcursions.length > 0 ? (
             <View className="px-4">

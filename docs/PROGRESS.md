@@ -21,7 +21,7 @@
 | 9 | Notificaciones push | ✅ COMPLETADA | 2026-03-11 |
 | 10 | Modo offline | ✅ COMPLETADA | 2026-03-27 |
 | 11 | Perfil y estadísticas | ✅ COMPLETADA | 2026-03-27 |
-| 12 | Polish final | ⏳ Pendiente | - |
+| 12 | Polish final | ✅ COMPLETADA | 2026-03-27 |
 
 ---
 
@@ -511,6 +511,46 @@ app/(tabs)/bookings.tsx          ← OfflineBanner integrado
 stores/profileStore.ts           ← updateProfile, uploadAvatar, fetchActivityStats, fetchActivityChart
 components/ui/ActivityChart.tsx  ← gráfico barras custom, últimos 30 días, sin librerías extra
 app/(tabs)/profile.tsx           ← pantalla completa perfil con todas las secciones
+```
+
+---
+
+## FASE 12 - Polish final ✅ COMPLETADA
+
+### Tareas completadas
+- [x] **Onboarding:** `app/onboarding.tsx` → carrusel 3 slides, dots animados, botón Omitir/Siguiente/Empezar; flag `granatour_onboarding_done` en AsyncStorage; solo se muestra la primera vez
+- [x] `app/index.tsx` → comprueba onboarding antes de redirigir
+- [x] **Skeleton loaders:** `components/ui/SkeletonLoader.tsx` → `Skeleton` base + `ExcursionCardSkeleton`, `BookingCardSkeleton`, `ActivityCardSkeleton`, `ProfileHeaderSkeleton` con shimmer animado (opacity loop)
+- [x] Home (`index.tsx`) → reemplazado ActivityIndicator por `ExcursionCardSkeleton` en "Próximas salidas"
+- [x] Bookings (`bookings.tsx`) → reemplazado ActivityIndicator por `BookingCardSkeleton`
+- [x] **Haptic feedback:** `expo-haptics` instalado (v15.0.8)
+  - `excursion/[id].tsx` → `NotificationFeedbackType.Success` al confirmar reserva
+  - `activity.tsx` → `ImpactFeedbackStyle.Medium` al iniciar tracking
+  - `guide-excursion/[id].tsx` → `NotificationFeedbackType.Success` al confirmar reserva como guía
+- [x] **Dark mode:** `tailwind.config.js` → `darkMode: 'media'`; `dark:` variants en Home (fondo, header, textos)
+- [x] **EAS Build:** `eas.json` con profiles development/preview/production; `app.json` → `bundleIdentifier`/`package` = `com.granatour.app`
+- [x] `tsc --noEmit` sin errores
+
+### Criterio de éxito
+- [x] Onboarding en primer lanzamiento, skip para recurrentes
+- [x] Skeleton loaders en listas de Home y Reservas
+- [x] Haptic al reservar, iniciar tracking y confirmar reserva como guía
+- [x] Dark mode via NativeWind `darkMode: 'media'` listo para usar
+- [x] EAS Build configurado para generar APK (preview) y App Bundle (production)
+
+### Fase 12 (completada)
+```
+app/onboarding.tsx               ← carrusel 3 slides, dots animados, AsyncStorage flag
+app/index.tsx                    ← comprueba onboarding_done antes de redirigir
+components/ui/SkeletonLoader.tsx ← Skeleton + 4 variantes especializadas con shimmer
+app/(tabs)/index.tsx             ← ExcursionCardSkeleton en próximas + dark: variants
+app/(tabs)/bookings.tsx          ← BookingCardSkeleton reemplaza ActivityIndicator
+app/excursion/[id].tsx           ← haptic al confirmar reserva
+app/(tabs)/activity.tsx          ← haptic al iniciar tracking
+app/guide-excursion/[id].tsx     ← haptic al confirmar reserva como guía
+tailwind.config.js               ← darkMode: 'media'
+eas.json                         ← configuración EAS Build
+app.json                         ← bundleIdentifier + package com.granatour.app
 ```
 
 ---

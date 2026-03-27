@@ -14,6 +14,7 @@ import {
 import MapView, { Polyline, Region } from 'react-native-maps';
 import { useFocusEffect } from 'expo-router';
 import { useShallow } from 'zustand/react/shallow';
+import * as Haptics from 'expo-haptics';
 
 import { useActivityStore } from '@/stores/activityStore';
 import { ActivityCard } from '@/components/ActivityCard';
@@ -124,6 +125,8 @@ export default function ActivityScreen() {
   }, [error, clearError]);
 
   const handleStartTracking = useCallback(async () => {
+    // Haptic de impacto al iniciar el tracking GPS
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     await startTracking();
   }, [startTracking]);
 
