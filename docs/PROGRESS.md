@@ -19,7 +19,7 @@
 | 7 | Reviews y valoraciones | ✅ COMPLETADA | 2026-03-11 |
 | 8 | Panel guía | ✅ COMPLETADA | 2026-03-11 |
 | 9 | Notificaciones push | ✅ COMPLETADA | 2026-03-11 |
-| 10 | Modo offline | ⏳ Pendiente | - |
+| 10 | Modo offline | ✅ COMPLETADA | 2026-03-27 |
 | 11 | Perfil y estadísticas | ⏳ Pendiente | - |
 | 12 | Polish final | ⏳ Pendiente | - |
 
@@ -441,10 +441,51 @@ tsconfig.json                                         ← excluye supabase/funct
 
 ---
 
+## FASE 10 - Modo offline ✅ COMPLETADA
+
+### Tareas completadas
+- [x] `npx expo install @react-native-community/netinfo` instalado (v11.4.1)
+- [x] `hooks/useNetworkState.ts` → detección de conectividad en tiempo real con NetInfo; actualiza offlineStore
+- [x] `stores/offlineStore.ts` → store con persist (AsyncStorage); cola de `PendingAction` con tipo discriminado; `setSyncing` para UI
+- [x] `stores/excursionsStore.ts` → persist parcial: `excursions`, `featuredExcursions`, `upcomingExcursions`; fallback en `getExcursionById` desde caché local
+- [x] `stores/bookingsStore.ts` → persist parcial: `bookings`; fallback en `getBookingById` desde caché; modo offline en `createBooking` (encola en lugar de fallar)
+- [x] `components/ui/OfflineBanner.tsx` → banner animado (Animated.timing opacity); controla montaje/desmontaje para fade-out correcto; muestra pendingCount
+- [x] `app/_layout.tsx` → `useNetworkState()` activa el listener; `subscribe` a `offlineStore` para procesar cola al reconectar; `clearPendingActions()` al logout
+- [x] Pantallas `index.tsx`, `explore.tsx`, `bookings.tsx` → `<OfflineBanner />` integrado
+- [x] Fix I-01: `OfflineBanner` controla desmontaje tras animación
+- [x] Fix I-02: verificar usuario autenticado antes de procesar cola; limpiar cola al cerrar sesión
+
+### Criterio de éxito
+- [x] App funciona sin internet mostrando datos cacheados (excursiones, reservas)
+- [x] Reserva offline se encola y se sincroniza automáticamente al reconectar
+- [x] Banner visual informa del estado offline y del número de pendientes
+- [x] Desconectar → reconectar → las reservas pendientes se envían automáticamente
+
+### Notas técnicas
+- `partialize` en persist evita persistir estado transitorio (loading, error, currentX)
+- `isOnline: true` por defecto y NO persistido (se recalcula al arrancar con NetInfo.fetch)
+- El subscribe en `_layout.tsx` detecta la transición offline→online en el mismo ciclo de evento
+- Acciones huérfanas prevenidas: se borran al logout y se comprueban antes de procesar
+
+### Fase 10 (completada)
+```
+hooks/useNetworkState.ts         ← detección NetInfo, actualiza offlineStore
+stores/offlineStore.ts           ← cola persist, setSyncing, clearPendingActions
+stores/excursionsStore.ts        ← persist parcial + fallback offline en getById
+stores/bookingsStore.ts          ← persist parcial + flujo offline en createBooking
+components/ui/OfflineBanner.tsx  ← banner animado con fade-out correcto
+app/_layout.tsx                  ← listener red + procesado cola al reconectar
+app/(tabs)/index.tsx             ← OfflineBanner integrado
+app/(tabs)/explore.tsx           ← OfflineBanner integrado
+app/(tabs)/bookings.tsx          ← OfflineBanner integrado
+```
+
+---
+
 ## Notas de desarrollo
 
 - **Deadline:** 20-21 mayo 2026
 - **Semanas disponibles:** ~12 semanas
 - **Phases 6 y 7** pueden hacerse en paralelo
-- **Phases recortables si falta tiempo:** 9 (push) y 10 (offline)
+- **Phases recortables si falta tiempo:** 9 (push) y 10 (offline) ← ya completadas
 - Cada fase termina con commit limpio en GitHub
