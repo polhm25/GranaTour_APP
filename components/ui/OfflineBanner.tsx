@@ -1,5 +1,5 @@
 // Banner visual que indica el estado de conectividad de red
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { View, Text, Animated } from 'react-native';
 import { useOfflineStore } from '@/stores/offlineStore';
 
@@ -8,20 +8,35 @@ export function OfflineBanner() {
   const pendingCount = useOfflineStore((state) => state.pendingActions.length);
   const syncing = useOfflineStore((state) => state.syncing);
 
-  // Animación de opacidad para entrada/salida suave del banner
-  const opacity = useRef(new Animated.Value(0)).current;
-  // Controla si el banner debe mostrarse (offline o sincronizando)
   const shouldShow = !isOnline || syncing;
 
+  // Animación de opacidad para entrada/salida suave del banner
+  const opacity = useRef(new Animated.Value(0)).current;
+  // visible controla el montaje del nodo: se desmonta DESPUÉS de que termina el fade-out
+  const [visible, setVisible] = useState(shouldShow);
+
   useEffect(() => {
-    Animated.timing(opacity, {
-      toValue: shouldShow ? 1 : 0,
-      duration: 300,
-      useNativeDriver: true,
-    }).start();
+    if (shouldShow) {
+      // Mostrar: montar primero, luego animar a opacidad 1
+      setVisible(true);
+      Animated.timing(opacity, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }).start();
+    } else {
+      // Ocultar: animar a opacidad 0 y desmontar al terminar
+      Animated.timing(opacity, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      }).start(({ finished }) => {
+        if (finished) setVisible(false);
+      });
+    }
   }, [shouldShow, opacity]);
 
-  if (isOnline && !syncing) return null;
+  if (!visible) return null;
 
   // Mensaje según el estado actual
   let mensaje = 'Sin conexión · Mostrando datos en caché';

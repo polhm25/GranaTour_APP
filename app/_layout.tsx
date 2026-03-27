@@ -155,6 +155,10 @@ export default function RootLayout() {
         // Solo actuar en la transición offline → online
         if (!(!prevState.isOnline && state.isOnline)) return;
 
+        // I-02: no procesar si el usuario no está autenticado (acciones huérfanas de logout)
+        const user = useAuthStore.getState().user;
+        if (!user) return;
+
         const { pendingActions, removePendingAction, setSyncing } = useOfflineStore.getState();
         if (pendingActions.length === 0) return;
 
@@ -218,13 +222,15 @@ export default function RootLayout() {
             initPushAndReminders(profile, registerPushToken);
           }
         } else {
-          // Logout: limpiar perfil y desactivar token push
+          // Logout: limpiar perfil, desactivar token push y vaciar cola offline
           setUser(null);
           deactivateToken().catch((err) => {
             console.error('[GranaTour] deactivateToken error:', err);
           });
           // Cancelar notificaciones programadas al cerrar sesión
           Notifications.cancelAllScheduledNotificationsAsync().catch(() => {});
+          // I-02: limpiar cola offline al cerrar sesión para no ejecutar acciones de otro usuario
+          useOfflineStore.getState().clearPendingActions();
         }
       }
     );
