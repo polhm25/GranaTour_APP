@@ -15,6 +15,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ExcursionCard } from '@/components/ExcursionCard';
+import { OfflineBanner } from '@/components/ui/OfflineBanner';
 import { COLORS } from '@/lib/constants';
 import type { ExcursionConGuia } from '@/lib/types';
 import { useExcursionsStore } from '@/stores/excursionsStore';
@@ -80,6 +81,7 @@ export default function HomeScreen() {
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <SafeAreaView className="flex-1 bg-neutral-50">
+      <OfflineBanner />
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}

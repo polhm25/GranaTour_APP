@@ -17,6 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS } from '@/lib/constants';
 import { formatDate, formatPrice } from '@/lib/utils';
 import { useBookingsStore } from '@/stores/bookingsStore';
+import { OfflineBanner } from '@/components/ui/OfflineBanner';
 import type { EstadoReserva, ReservaConDetalles } from '@/lib/types';
 
 // ─── Tabs de filtro ───────────────────────────────────────────────────────────
@@ -177,6 +178,7 @@ export default function BookingsScreen() {
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <SafeAreaView className="flex-1 bg-neutral-50" edges={['top']}>
+      <OfflineBanner />
       {/* Cabecera */}
       <View className="px-4 pt-4 pb-2">
         <Text className="text-neutral-800 font-bold" style={styles.header}>

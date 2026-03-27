@@ -18,6 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ExcursionCard } from '@/components/ExcursionCard';
 import { ExcursionMapView } from '@/components/MapView';
 import { FilterSheet } from '@/components/ui/FilterSheet';
+import { OfflineBanner } from '@/components/ui/OfflineBanner';
 import { COLORS } from '@/lib/constants';
 import type { ExcursionConGuia } from '@/lib/types';
 import { useExcursionsStore, type ExcursionFilters } from '@/stores/excursionsStore';
@@ -226,6 +227,7 @@ export default function ExploreScreen() {
   // ── Render principal ──────────────────────────────────────────────────────
   return (
     <SafeAreaView className="flex-1 bg-neutral-50">
+      <OfflineBanner />
       {/* ── Header fijo ────────────────────────────────────────────────── */}
       <View
         className="flex-row items-center justify-between px-4 py-3 bg-white border-b border-neutral-200"

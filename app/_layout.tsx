@@ -13,6 +13,9 @@ import type { AuthChangeEvent } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
 import { usePushStore } from '@/stores/pushStore';
+import { useOfflineStore } from '@/stores/offlineStore';
+import { useBookingsStore } from '@/stores/bookingsStore';
+import { useNetworkState } from '@/hooks/useNetworkState';
 import type { Usuario, ReservaConDetalles } from '@/lib/types';
 
 // Busca el perfil del usuario en la tabla USUARIOS por su supabase_auth_id
@@ -138,8 +141,42 @@ export default function RootLayout() {
   const registerPushToken = usePushStore((state) => state.registerPushToken);
   const deactivateToken = usePushStore((state) => state.deactivateToken);
 
+  // Hook de conectividad: actualiza offlineStore.isOnline en tiempo real
+  useNetworkState();
+
   // Ref para el listener de notificaciones recibidas (evitar memory leaks)
   const notificationListener = useRef<Notifications.EventSubscription | null>(null);
+
+  // Efecto para procesar acciones pendientes cuando se recupera la conexión
+  useEffect(() => {
+    // subscribe acepta un único listener (state, prevState) sin necesitar subscribeWithSelector
+    const unsubscribe = useOfflineStore.subscribe(
+      async (state, prevState) => {
+        // Solo actuar en la transición offline → online
+        if (!(!prevState.isOnline && state.isOnline)) return;
+
+        const { pendingActions, removePendingAction, setSyncing } = useOfflineStore.getState();
+        if (pendingActions.length === 0) return;
+
+        setSyncing(true);
+        for (const action of pendingActions) {
+          if (action.type === 'create_booking') {
+            try {
+              const result = await useBookingsStore.getState().createBooking(action.payload);
+              if (result !== null) {
+                removePendingAction(action.id);
+              }
+            } catch {
+              // Mantener en cola si falla; se reintentará al reconectar de nuevo
+            }
+          }
+        }
+        setSyncing(false);
+      }
+    );
+
+    return unsubscribe;
+  }, []);
 
   useEffect(() => {
     // CR-01: Obtener sesión inicial y marcar como listo al terminar.
