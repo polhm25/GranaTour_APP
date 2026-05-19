@@ -59,11 +59,9 @@ export default function ExploreScreen() {
   // Ref para el timer de debounce
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // ── Carga inicial ─────────────────────────────────────────────────────────
+  // ── Carga inicial: siempre refresca desde Supabase; la caché persiste como fallback visual ──
   useEffect(() => {
-    if (excursions.length === 0) {
-      fetchExcursions();
-    }
+    fetchExcursions();
   }, []);
 
   // ── Limpieza del timer de debounce al desmontar ───────────────────────────
