@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '@/lib/supabase';
+import { getProximaSalida } from '@/lib/utils';
 import type { ExcursionConGuia, DificultadExcursion } from '@/lib/types';
 
 // Devuelve un mensaje de error amigable en español según el contexto de la operación.
@@ -42,6 +43,7 @@ const EXCURSION_FIELDS = [
   'dificultad',
   'precio_persona',
   'fecha_inicio',
+  'frecuencia',
   'plazas_disponibles',
   'id_guia',
   'latitud',
@@ -59,7 +61,7 @@ const SELECT_CON_GUIA = `${EXCURSION_FIELDS}, guia:usuarios!id_guia(${GUIA_FIELD
 
 // Calcula la media de valoraciones a partir del array de reviews de Supabase
 // y elimina el campo reviews del objeto resultante (no forma parte del tipo ExcursionConGuia)
-function computeValoracionMedia(
+function computeExcursionFields(
   raw: ExcursionConGuia & { reviews?: { puntuacion: number }[] }
 ): ExcursionConGuia {
   const puntuaciones = raw.reviews ?? [];
@@ -68,7 +70,9 @@ function computeValoracionMedia(
       ? Math.round((puntuaciones.reduce((sum, r) => sum + r.puntuacion, 0) / puntuaciones.length) * 10) / 10
       : null;
   const { reviews: _reviews, ...rest } = raw;
-  return { ...rest, valoracion_media };
+  // Calcular proxima_salida en cliente a partir de fecha_inicio + frecuencia
+  const proxima_salida = getProximaSalida(rest.fecha_inicio, rest.frecuencia ?? 'unica');
+  return { ...rest, valoracion_media, proxima_salida };
 }
 
 interface ExcursionsState {
@@ -131,7 +135,7 @@ export const useExcursionsStore = create<ExcursionsState>()(
           if (error) throw error;
 
           const excursions = ((data as unknown as (ExcursionConGuia & { reviews?: { puntuacion: number }[] })[]) ?? [])
-            .map(computeValoracionMedia);
+            .map(computeExcursionFields);
           set({ excursions });
         } catch (error) {
           set({ error: getExcursionErrorMessage(error, 'list') });
@@ -155,7 +159,7 @@ export const useExcursionsStore = create<ExcursionsState>()(
 
           if (error) throw error;
 
-          const excursion = computeValoracionMedia(data as unknown as ExcursionConGuia & { reviews?: { puntuacion: number }[] });
+          const excursion = computeExcursionFields(data as unknown as ExcursionConGuia & { reviews?: { puntuacion: number }[] });
           set({ currentExcursion: excursion });
           return excursion;
         } catch (error) {
@@ -191,7 +195,7 @@ export const useExcursionsStore = create<ExcursionsState>()(
           if (error) throw error;
 
           const excursions = ((data as unknown as (ExcursionConGuia & { reviews?: { puntuacion: number }[] })[]) ?? [])
-            .map(computeValoracionMedia);
+            .map(computeExcursionFields);
 
           // Ordenar en cliente: guías con mayor valoración primero, sin valoración al final
           const sorted = [...excursions].sort((a, b) => {
@@ -216,21 +220,27 @@ export const useExcursionsStore = create<ExcursionsState>()(
       fetchUpcomingExcursions: async () => {
         set({ loadingUpcoming: true, error: null });
         try {
-          // Fecha de hoy en formato 'YYYY-MM-DD' para comparar con el campo DATE de PostgreSQL
           const today = new Date().toISOString().split('T')[0];
 
+          // Incluir excursiones con fecha futura O con frecuencia periódica (siempre vigentes)
           const { data, error } = await supabase
             .from('excursiones')
             .select(SELECT_CON_GUIA)
             .eq('activa', true)
-            .gte('fecha_inicio', today)
+            .or(`fecha_inicio.gte.${today},frecuencia.neq.unica`)
             .order('fecha_inicio', { ascending: true })
-            .limit(10);
+            .limit(20);
 
           if (error) throw error;
 
-          const upcoming = ((data as unknown as (ExcursionConGuia & { reviews?: { puntuacion: number }[] })[]) ?? [])
-            .map(computeValoracionMedia);
+          const all = ((data as unknown as (ExcursionConGuia & { reviews?: { puntuacion: number }[] })[]) ?? [])
+            .map(computeExcursionFields);
+
+          // Ordenar por proxima_salida para que las más próximas aparezcan primero
+          const upcoming = [...all]
+            .sort((a, b) => (a.proxima_salida ?? a.fecha_inicio).localeCompare(b.proxima_salida ?? b.fecha_inicio))
+            .slice(0, 10);
+
           set({ upcomingExcursions: upcoming });
           return upcoming;
         } catch (error) {
@@ -294,6 +304,7 @@ export const useExcursionsStore = create<ExcursionsState>()(
     }),
     {
       name: 'excursions-cache',
+      version: 1, // incrementar invalida la caché anterior (útil tras cambios de esquema)
       storage: createJSONStorage(() => AsyncStorage),
       // Solo persistir la caché de listas; el estado transitorio se descarta al cerrar
       partialize: (state) => ({

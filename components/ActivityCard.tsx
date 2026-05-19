@@ -1,6 +1,7 @@
 // Tarjeta de actividad GPS para el historial de la pantalla Activity
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
 import { COLORS } from '@/lib/constants';
 import { formatDateShort, formatDistanceLabel, formatSpeedLabel } from '@/lib/utils';
@@ -8,11 +9,12 @@ import type { Actividad } from '@/lib/types';
 
 interface ActivityCardProps {
   actividad: Actividad;
+  onPress?: () => void;
 }
 
-export function ActivityCard({ actividad }: ActivityCardProps) {
+export function ActivityCard({ actividad, onPress }: ActivityCardProps) {
   return (
-    <View style={styles.card}>
+    <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={onPress ? 0.75 : 1}>
       <View className="flex-row justify-between items-start">
         <View className="flex-1 mr-3">
           <Text className="text-base font-semibold text-neutral-800" numberOfLines={1}>
@@ -75,7 +77,15 @@ export function ActivityCard({ actividad }: ActivityCardProps) {
           </View>
         )}
       </View>
-    </View>
+
+      {/* Indicador visual de que la card es pulsable */}
+      {onPress && (
+        <View className="flex-row items-center justify-end mt-2">
+          <Text className="text-xs text-neutral-400 mr-1">Ver detalles</Text>
+          <Ionicons name="chevron-forward" size={12} color={COLORS.neutral[400]} />
+        </View>
+      )}
+    </TouchableOpacity>
   );
 }
 

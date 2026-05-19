@@ -10,11 +10,13 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useShallow } from 'zustand/react/shallow';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { Ionicons } from '@expo/vector-icons';
 import { ExcursionCard } from '@/components/ExcursionCard';
 import { ExcursionMapView } from '@/components/MapView';
 import { FilterSheet } from '@/components/ui/FilterSheet';
@@ -49,10 +51,10 @@ export default function ExploreScreen() {
 
   // ── Estado local ─────────────────────────────────────────────────────────
   const [filterSheetVisible, setFilterSheetVisible] = useState(false);
-  // Valor del TextInput (el store se actualiza con debounce)
   const [searchInputValue, setSearchInputValue] = useState('');
-  // Modo de visualización: lista o mapa
   const [viewMode, setViewMode] = useState<ViewMode>('list');
+  // Excursión seleccionada en el mapa (muestra la card overlay)
+  const [selectedExcursion, setSelectedExcursion] = useState<ExcursionConGuia | null>(null);
 
   // Ref para el timer de debounce
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -117,12 +119,13 @@ export default function ExploreScreen() {
     [excursions, filters, getFilteredExcursions]
   );
 
-  // ── Navegación a detalle ──────────────────────────────────────────────────
+  // ── Selección en mapa: muestra la card overlay ────────────────────────────
   const handleMarkerPress = useCallback(
     (id: number) => {
-      router.push(`/excursion/${id}`);
+      const excursion = filteredExcursions.find((e) => e.id_excursion === id) ?? null;
+      setSelectedExcursion(excursion);
     },
-    [router]
+    [filteredExcursions]
   );
 
   // ── Render de cada ítem ───────────────────────────────────────────────────
@@ -171,9 +174,9 @@ export default function ExploreScreen() {
   const emptyState = useMemo(
     () => (
       <View className="flex-1 items-center justify-center py-20 px-8">
-        <Text className="text-neutral-400 text-center mb-2" style={styles.emptyIcon}>
-          🔍
-        </Text>
+        <View className="mb-2">
+          <Ionicons name="search-outline" size={48} color={COLORS.neutral[400]} />
+        </View>
         <Text className="text-neutral-700 font-semibold text-center mb-1" style={styles.emptyTitle}>
           No se encontraron excursiones
         </Text>
@@ -241,11 +244,20 @@ export default function ExploreScreen() {
         <View className="flex-row items-center">
           {/* Botón de alternancia Lista / Mapa */}
           <TouchableOpacity
-            onPress={() => setViewMode((m) => (m === 'list' ? 'map' : 'list'))}
+            onPress={() => {
+              setSelectedExcursion(null);
+              setViewMode((m) => (m === 'list' ? 'map' : 'list'));
+            }}
             style={styles.viewToggleButton}
+            className="flex-row items-center"
           >
-            <Text className="text-primary-600 font-semibold" style={styles.viewToggleText}>
-              {viewMode === 'list' ? '🗺 Mapa' : '☰ Lista'}
+            <Ionicons
+              name={viewMode === 'list' ? 'map-outline' : 'list-outline'}
+              size={16}
+              color={COLORS.primary[600]}
+            />
+            <Text className="text-primary-600 font-semibold ml-1" style={styles.viewToggleText}>
+              {viewMode === 'list' ? 'Mapa' : 'Lista'}
             </Text>
           </TouchableOpacity>
 
@@ -255,8 +267,9 @@ export default function ExploreScreen() {
             style={styles.filterButton}
             className="flex-row items-center"
           >
-            <Text className="text-primary-600 font-semibold" style={styles.filterButtonText}>
-              ⚙ Filtros
+            <Ionicons name="options-outline" size={16} color={COLORS.primary[600]} />
+            <Text className="text-primary-600 font-semibold ml-1" style={styles.filterButtonText}>
+              Filtros
             </Text>
 
             {/* Badge numérico sobre el botón */}
@@ -278,12 +291,31 @@ export default function ExploreScreen() {
           </Text>
         </View>
       ) : viewMode === 'map' ? (
-        /* ── Vista de mapa ──────────────────────────────────────────── */
-        <ExcursionMapView
-          excursions={filteredExcursions}
-          onMarkerPress={handleMarkerPress}
-          style={styles.fullMap}
-        />
+        /* ── Vista de mapa con overlay de card seleccionada ──────── */
+        <View style={styles.mapContainer}>
+          <ExcursionMapView
+            excursions={filteredExcursions}
+            onMarkerPress={handleMarkerPress}
+            selectedId={selectedExcursion?.id_excursion}
+            style={styles.fullMap}
+          />
+
+          {selectedExcursion && (
+            <View style={styles.mapCardOverlay}>
+              <TouchableOpacity
+                style={styles.mapCardClose}
+                onPress={() => setSelectedExcursion(null)}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="close" size={18} color={COLORS.neutral[600]} />
+              </TouchableOpacity>
+              <ExcursionCard
+                excursion={selectedExcursion}
+                onPress={() => router.push(`/excursion/${selectedExcursion.id_excursion}`)}
+              />
+            </View>
+          )}
+        </View>
       ) : (
         /* ── FlatList principal ──────────────────────────────────────── */
         <FlatList
@@ -370,12 +402,34 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
     flexGrow: 1,
   },
+  mapContainer: {
+    flex: 1,
+    position: 'relative',
+  },
   // Mapa a pantalla completa (ocupa todo el espacio bajo el header)
   fullMap: {
     flex: 1,
   },
-  emptyIcon: {
-    fontSize: 48,
+  mapCardOverlay: {
+    position: 'absolute',
+    bottom: Platform.OS === 'ios' ? 24 : 16,
+    left: 12,
+    right: 12,
+  },
+  mapCardClose: {
+    alignSelf: 'flex-end',
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    width: 34,
+    height: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.18,
+    shadowRadius: 3,
+    elevation: 4,
   },
   emptyTitle: {
     fontSize: 16,

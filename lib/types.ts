@@ -7,6 +7,7 @@
 export type RolUsuario = 'cliente' | 'guia' | 'admin';
 export type EstadoReserva = 'pendiente' | 'confirmada' | 'cancelada';
 export type DificultadExcursion = 'facil' | 'moderada' | 'dificil' | 'muy_dificil';
+export type FrecuenciaExcursion = 'unica' | 'semanal' | 'quincenal' | 'mensual';
 export type EstadoActividad = 'en_curso' | 'completada' | 'descartada';
 export type PlataformaPush = 'ios' | 'android';
 
@@ -45,7 +46,8 @@ export interface Excursion {
   desnivel_positivo: number | null;
   dificultad: DificultadExcursion | null;
   precio_persona: number;
-  fecha_inicio: string; // 'YYYY-MM-DD'
+  fecha_inicio: string; // 'YYYY-MM-DD' — primera salida o referencia para calcular periodicidad
+  frecuencia: FrecuenciaExcursion;
   plazas_disponibles: number;
   id_guia: number | null;
   latitud: number | null;
@@ -126,8 +128,9 @@ export interface PushToken {
 
 export interface ExcursionConGuia extends Excursion {
   guia?: Pick<Usuario, 'id_usuario' | 'nombre' | 'ap1' | 'avatar_url' | 'valoracion'>;
-  // Media de valoraciones calculada en el store a partir de las reviews (Fase 7)
   valoracion_media?: number | null;
+  // Próxima salida calculada en el store a partir de fecha_inicio + frecuencia
+  proxima_salida?: string;
 }
 
 export interface ReservaConDetalles extends Reserva {

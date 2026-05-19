@@ -1,12 +1,12 @@
-// Componente de mapa reutilizable para mostrar excursiones con markers, callouts y polylines.
-// Usado en la pantalla Explorar (modo mapa) y en el detalle de excursión.
+// Componente de mapa reutilizable para mostrar excursiones con markers y polylines.
+// En modo interactivo (Explorar) onMarkerPress dispara al tocar el pin.
+// En modo no interactivo (detalle) el mapa es estático y solo muestra posición.
 
 import React from 'react';
-import { StyleSheet, Text, View, ViewStyle } from 'react-native';
-import RNMapView, { Callout, Marker, Polyline, Region } from 'react-native-maps';
+import { StyleSheet, ViewStyle } from 'react-native';
+import RNMapView, { Marker, Polyline, Region } from 'react-native-maps';
 
 import { COLORS } from '@/lib/constants';
-import { formatPrice } from '@/lib/utils';
 import type { ExcursionConGuia } from '@/lib/types';
 
 // Región inicial centrada en Granada capital
@@ -19,7 +19,6 @@ const GRANADA_REGION: Region = {
 
 // Parsea un GeoJSON LineString serializado y devuelve coordenadas para Polyline.
 // GeoJSON usa [longitude, latitude]; react-native-maps usa { latitude, longitude }.
-// Filtra puntos con coordenadas no numéricas o fuera de rango para evitar errores en el mapa.
 function parseGeoJsonLineString(text: string): { latitude: number; longitude: number }[] {
   try {
     const geojson = JSON.parse(text) as {
@@ -43,8 +42,6 @@ function parseGeoJsonLineString(text: string): { latitude: number; longitude: nu
   }
 }
 
-// Calcula la región inicial del mapa.
-// Si hay una excursión seleccionada con coords, centra ahí; si no, usa Granada.
 function getInitialRegion(excursions: ExcursionConGuia[], selectedId?: number): Region {
   if (selectedId !== undefined) {
     const selected = excursions.find((e) => e.id_excursion === selectedId);
@@ -64,7 +61,7 @@ export interface ExcursionMapViewProps {
   excursions: ExcursionConGuia[];
   onMarkerPress: (id: number) => void;
   selectedId?: number;
-  // interactive=false: deshabilita scroll/zoom y oculta callouts (para detalle de excursión)
+  // interactive=false: deshabilita scroll/zoom (para detalle de excursión)
   interactive?: boolean;
   style?: ViewStyle;
 }
@@ -78,14 +75,12 @@ export function ExcursionMapView({
 }: ExcursionMapViewProps) {
   const initialRegion = getInitialRegion(excursions, selectedId);
 
-  // Type predicate para confirmar a TypeScript que latitud/longitud son number (no null)
   function hasCoords(
     e: ExcursionConGuia
   ): e is ExcursionConGuia & { latitud: number; longitud: number } {
     return e.latitud !== null && e.longitud !== null;
   }
 
-  // Solo mostrar excursiones con coordenadas válidas
   const excursionsWithCoords = excursions.filter(hasCoords);
 
   return (
@@ -109,35 +104,17 @@ export function ExcursionMapView({
 
         return (
           <React.Fragment key={excursion.id_excursion}>
-            {/* Marker en el punto de inicio */}
             <Marker
               coordinate={{
                 latitude: excursion.latitud,
                 longitude: excursion.longitud,
               }}
               pinColor={isSelected ? COLORS.secondary[500] : COLORS.primary[500]}
-              tracksViewChanges={false}
-            >
-              {/* Callout solo en modo interactivo */}
-              {interactive && (
-                <Callout onPress={() => onMarkerPress(excursion.id_excursion)}>
-                  <View style={styles.callout}>
-                    <Text style={styles.calloutTitle} numberOfLines={2}>
-                      {excursion.nombre_ruta}
-                    </Text>
-                    <Text style={styles.calloutZona} numberOfLines={1}>
-                      📍 {excursion.zona}
-                    </Text>
-                    <Text style={styles.calloutPrice}>
-                      {formatPrice(excursion.precio_persona)}/persona
-                    </Text>
-                    <Text style={styles.calloutHint}>Toca para ver detalle →</Text>
-                  </View>
-                </Callout>
-              )}
-            </Marker>
+              // tracksViewChanges activo solo en el marker seleccionado para reflejar el cambio de color
+              tracksViewChanges={isSelected}
+              onPress={interactive ? () => onMarkerPress(excursion.id_excursion) : undefined}
+            />
 
-            {/* Polyline de la ruta si existe y tiene suficientes puntos */}
             {routeCoords.length > 1 && (
               <Polyline
                 coordinates={routeCoords}
@@ -155,31 +132,5 @@ export function ExcursionMapView({
 const styles = StyleSheet.create({
   map: {
     flex: 1,
-  },
-  callout: {
-    width: 200,
-    padding: 8,
-  },
-  calloutTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: COLORS.neutral[800],
-    marginBottom: 4,
-  },
-  calloutZona: {
-    fontSize: 12,
-    color: COLORS.neutral[500],
-    marginBottom: 3,
-  },
-  calloutPrice: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: COLORS.primary[600],
-    marginBottom: 6,
-  },
-  calloutHint: {
-    fontSize: 12,
-    color: COLORS.primary[500],
-    fontWeight: '600',
   },
 });

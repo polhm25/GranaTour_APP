@@ -1,6 +1,6 @@
 // Funciones helper genéricas de la aplicación
 
-import { DificultadExcursion, EstadoReserva } from './types';
+import { DificultadExcursion, EstadoReserva, FrecuenciaExcursion } from './types';
 import { COLORS } from './constants';
 
 /**
@@ -96,4 +96,45 @@ export function formatDateShort(isoString: string): string {
   const date = new Date(isoString);
   if (isNaN(date.getTime())) return '—';
   return date.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+/**
+ * Calcula la próxima fecha de salida a partir de una fecha base y una frecuencia.
+ * Para 'unica' devuelve siempre la fecha_inicio original.
+ * Para periódicas avanza desde fecha_inicio en intervalos hasta igualar o superar hoy.
+ */
+export function getProximaSalida(fechaInicio: string, frecuencia: FrecuenciaExcursion): string {
+  if (frecuencia === 'unica') return fechaInicio;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  // Parsear como fecha local (sin zona horaria) para evitar off-by-one con UTC
+  const [year, month, day] = fechaInicio.split('-').map(Number);
+  let next = new Date(year, month - 1, day);
+
+  const intervalDays =
+    frecuencia === 'semanal' ? 7 : frecuencia === 'quincenal' ? 14 : 30;
+
+  while (next < today) {
+    next = new Date(next.getTime() + intervalDays * 24 * 60 * 60 * 1000);
+  }
+
+  const yy = next.getFullYear();
+  const mm = String(next.getMonth() + 1).padStart(2, '0');
+  const dd = String(next.getDate()).padStart(2, '0');
+  return `${yy}-${mm}-${dd}`;
+}
+
+/**
+ * Devuelve la etiqueta legible de una frecuencia de excursión.
+ */
+export function formatFrecuencia(frecuencia: FrecuenciaExcursion): string {
+  const labels: Record<FrecuenciaExcursion, string> = {
+    unica:     'Fecha única',
+    semanal:   'Cada semana',
+    quincenal: 'Cada 2 semanas',
+    mensual:   'Mensual',
+  };
+  return labels[frecuencia];
 }

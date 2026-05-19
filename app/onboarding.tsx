@@ -4,8 +4,7 @@ import {
   Animated,
   Dimensions,
   FlatList,
-  NativeScrollEvent,
-  NativeSyntheticEvent,
+  ImageBackground,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -13,6 +12,7 @@ import {
   ViewToken,
 } from 'react-native';
 import { router } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuthStore } from '@/stores/authStore';
 import { COLORS } from '@/lib/constants';
@@ -23,38 +23,44 @@ export const ONBOARDING_KEY = 'granatour_onboarding_done';
 
 // ─── Slides ───────────────────────────────────────────────────────────────────
 
+type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
+
 interface Slide {
   id: string;
-  emoji: string;
+  iconName: IoniconName;
   title: string;
   subtitle: string;
-  bgColor: string;
+  imageUri: string;
+  overlayColor: string;
 }
 
 const SLIDES: Slide[] = [
   {
     id: 'discover',
-    emoji: '🏔️',
+    iconName: 'compass-outline',
     title: 'Descubre Granada',
     subtitle:
       'Explora las rutas más espectaculares de la provincia con guías expertos que conocen cada rincón.',
-    bgColor: COLORS.primary[500],
+    imageUri: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=800&q=80',
+    overlayColor: 'rgba(16,185,129,0.62)',
   },
   {
     id: 'track',
-    emoji: '📍',
+    iconName: 'navigate-outline',
     title: 'Registra tus aventuras',
     subtitle:
       'Graba tus rutas GPS en tiempo real, sube fotos geolocalizadas y revive cada momento de tu excursión.',
-    bgColor: COLORS.secondary[500],
+    imageUri: 'https://images.unsplash.com/photo-1551632811-561732d1e306?w=800&q=80',
+    overlayColor: 'rgba(139,30,63,0.62)',
   },
   {
     id: 'book',
-    emoji: '🗺️',
+    iconName: 'calendar-outline',
     title: 'Reserva y disfruta',
     subtitle:
       'Elige tu excursión favorita, reserva en segundos y únete a la comunidad GranaTour.',
-    bgColor: '#0F766E',
+    imageUri: 'https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=800&q=80',
+    overlayColor: 'rgba(15,118,110,0.62)',
   },
 ];
 
@@ -67,13 +73,11 @@ export default function OnboardingScreen() {
   const flatListRef = useRef<FlatList<Slide>>(null);
   const dotAnim = useRef(SLIDES.map(() => new Animated.Value(0))).current;
 
-  // Actualizar el índice activo y animar los dots al hacer scroll
   const onViewableItemsChanged = useCallback(
     ({ viewableItems }: { viewableItems: ViewToken[] }) => {
       if (viewableItems[0]?.index !== undefined && viewableItems[0].index !== null) {
         const idx = viewableItems[0].index;
         setCurrentIndex(idx);
-        // Animar dot activo
         SLIDES.forEach((_, i) => {
           Animated.timing(dotAnim[i], {
             toValue: i === idx ? 1 : 0,
@@ -88,7 +92,6 @@ export default function OnboardingScreen() {
 
   const viewabilityConfig = useRef({ viewAreaCoveragePercentThreshold: 50 }).current;
 
-  // Finalizar onboarding: guardar flag y navegar al destino correcto
   const handleFinish = useCallback(async () => {
     await AsyncStorage.setItem(ONBOARDING_KEY, 'true');
     const session = useAuthStore.getState().session;
@@ -99,7 +102,6 @@ export default function OnboardingScreen() {
     }
   }, []);
 
-  // Ir al siguiente slide
   const handleNext = useCallback(() => {
     if (currentIndex < SLIDES.length - 1) {
       flatListRef.current?.scrollToIndex({ index: currentIndex + 1, animated: true });
@@ -108,14 +110,22 @@ export default function OnboardingScreen() {
     }
   }, [currentIndex, handleFinish]);
 
-  // Renderizado de cada slide
   const renderSlide = useCallback(
     ({ item }: { item: Slide }) => (
-      <View style={[styles.slide, { backgroundColor: item.bgColor }]}>
-        <Text style={styles.emoji}>{item.emoji}</Text>
-        <Text style={styles.title}>{item.title}</Text>
-        <Text style={styles.subtitle}>{item.subtitle}</Text>
-      </View>
+      <ImageBackground
+        source={{ uri: item.imageUri }}
+        style={styles.slide}
+        resizeMode="cover"
+        blurRadius={2}
+      >
+        <View style={[styles.slideOverlay, { backgroundColor: item.overlayColor }]}>
+          <View style={styles.iconCircle}>
+            <Ionicons name={item.iconName} size={52} color="#fff" />
+          </View>
+          <Text style={styles.title}>{item.title}</Text>
+          <Text style={styles.subtitle}>{item.subtitle}</Text>
+        </View>
+      </ImageBackground>
     ),
     []
   );
@@ -168,7 +178,6 @@ export default function OnboardingScreen() {
 
         {/* Botones de navegación */}
         <View style={styles.buttonsRow}>
-          {/* Omitir — solo visible en slides intermedios */}
           {!isLastSlide ? (
             <TouchableOpacity onPress={handleFinish} activeOpacity={0.7} style={styles.skipButton}>
               <Text style={styles.skipText}>Omitir</Text>
@@ -197,7 +206,7 @@ export default function OnboardingScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.primary[500],
+    backgroundColor: '#000',
   },
   flatList: {
     flex: 1,
@@ -205,13 +214,23 @@ const styles = StyleSheet.create({
   slide: {
     width: SCREEN_WIDTH,
     flex: 1,
+  },
+  slideOverlay: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 40,
   },
-  emoji: {
-    fontSize: 80,
-    marginBottom: 32,
+  iconCircle: {
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    backgroundColor: 'rgba(255,255,255,0.20)',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 36,
   },
   title: {
     fontSize: 30,
@@ -223,7 +242,7 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     fontSize: 17,
-    color: 'rgba(255,255,255,0.85)',
+    color: 'rgba(255,255,255,0.88)',
     textAlign: 'center',
     lineHeight: 26,
   },

@@ -12,14 +12,16 @@ import {
   View,
 } from 'react-native';
 import MapView, { Polyline, Region } from 'react-native-maps';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useShallow } from 'zustand/react/shallow';
 import * as Haptics from 'expo-haptics';
 
 import { useActivityStore } from '@/stores/activityStore';
 import { ActivityCard } from '@/components/ActivityCard';
 import { PhotoCapture } from '@/components/PhotoCapture';
+import { ElevationProfileChart } from '@/components/ui/ElevationProfileChart';
 import { COLORS } from '@/lib/constants';
+import { fetchElevationProfile, type ElevationProfile } from '@/lib/openElevation';
 import { formatDistanceLabel, formatSpeedLabel, formatTimer } from '@/lib/utils';
 import type { Foto } from '@/lib/types';
 
@@ -35,6 +37,8 @@ const GRANADA_REGION: Region = {
 // ─── Pantalla principal ───────────────────────────────────────────────────────
 
 export default function ActivityScreen() {
+  const router = useRouter();
+
   // Selector 1: datos que cambian frecuentemente durante el tracking (timer, puntos, stats)
   // Selector separado para evitar re-renders del componente completo por el timer (C-03, I-01)
   const {
@@ -84,6 +88,9 @@ export default function ActivityScreen() {
 
   // Título editable en el modal de guardado
   const [titulo, setTitulo] = useState('');
+  // Perfil de altitud obtenido de Open-Elevation al mostrar el resumen
+  const [elevationProfile, setElevationProfile] = useState<ElevationProfile | null>(null);
+  const [loadingElevation, setLoadingElevation] = useState(false);
   // Referencia al mapa para animar la cámara al añadir puntos
   const mapRef = useRef<MapView>(null);
 
@@ -123,6 +130,17 @@ export default function ActivityScreen() {
       Alert.alert('Error', error, [{ text: 'OK', onPress: clearError }]);
     }
   }, [error, clearError]);
+
+  // Cargar perfil de altitud desde Open-Elevation al abrir el modal de resumen
+  useEffect(() => {
+    if (!pendingSummary || pendingSummary.points.length < 2) return;
+    setElevationProfile(null);
+    setLoadingElevation(true);
+    fetchElevationProfile(pendingSummary.points)
+      .then(setElevationProfile)
+      .catch(() => null)
+      .finally(() => setLoadingElevation(false));
+  }, [pendingSummary]);
 
   const handleStartTracking = useCallback(async () => {
     // Haptic de impacto al iniciar el tracking GPS
@@ -325,7 +343,12 @@ export default function ActivityScreen() {
               <FlatList
                 data={activities}
                 keyExtractor={(item) => String(item.id_actividad)}
-                renderItem={({ item }) => <ActivityCard actividad={item} />}
+                renderItem={({ item }) => (
+                  <ActivityCard
+                    actividad={item}
+                    onPress={() => router.push(`/activity/${item.id_actividad}`)}
+                  />
+                )}
                 contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 24 }}
                 showsVerticalScrollIndicator={false}
               />
@@ -375,6 +398,19 @@ export default function ActivityScreen() {
                 ↑ +{Math.round(pendingSummary?.elevationGain ?? 0)} m desnivel positivo
               </Text>
             )}
+
+            {/* Perfil de altitud desde Open-Elevation */}
+            <View style={styles.elevationSection}>
+              <Text style={styles.elevationTitle}>Perfil de altitud</Text>
+              {loadingElevation ? (
+                <View style={styles.elevationLoading}>
+                  <ActivityIndicator size="small" color={COLORS.primary[500]} />
+                  <Text style={styles.elevationLoadingText}>Obteniendo datos de altitud...</Text>
+                </View>
+              ) : elevationProfile ? (
+                <ElevationProfileChart profile={elevationProfile} />
+              ) : null}
+            </View>
 
             {/* Campo título */}
             <View className="mt-4">
@@ -616,5 +652,27 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: COLORS.error,
+  },
+  elevationSection: {
+    marginTop: 16,
+    marginBottom: 4,
+  },
+  elevationTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.neutral[600],
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  elevationLoading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 8,
+  },
+  elevationLoadingText: {
+    fontSize: 13,
+    color: COLORS.neutral[400],
   },
 });

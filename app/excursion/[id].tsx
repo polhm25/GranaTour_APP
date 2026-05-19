@@ -22,12 +22,21 @@ import { useShallow } from 'zustand/react/shallow';
 import * as Haptics from 'expo-haptics';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { Ionicons } from '@expo/vector-icons';
 import { ExcursionMapView } from '@/components/MapView';
 import { PhotoCapture } from '@/components/PhotoCapture';
 import { StarRating } from '@/components/StarRating';
 import { ReviewCard } from '@/components/ReviewCard';
+import { WeatherWidget } from '@/components/ui/WeatherWidget';
 import { COLORS } from '@/lib/constants';
-import { formatDate, formatDuration, formatPrice, getDifficultyColor } from '@/lib/utils';
+import {
+  formatDate,
+  formatDuration,
+  formatPrice,
+  getDifficultyColor,
+  formatFrecuencia,
+  getProximaSalida,
+} from '@/lib/utils';
 import { useExcursionsStore } from '@/stores/excursionsStore';
 import { useBookingsStore } from '@/stores/bookingsStore';
 import { usePhotosStore } from '@/stores/photosStore';
@@ -307,12 +316,17 @@ export default function ExcursionDetailScreen() {
     dificultad,
     precio_persona,
     fecha_inicio,
+    frecuencia,
     plazas_disponibles,
     imagen_url,
     latitud,
     longitud,
     guia,
+    proxima_salida,
   } = currentExcursion;
+
+  const isRecurring = frecuencia && frecuencia !== 'unica';
+  const nextDate = proxima_salida ?? getProximaSalida(fecha_inicio, frecuencia ?? 'unica');
 
   const difficultyColor = dificultad ? getDifficultyColor(dificultad) : COLORS.neutral[400];
   const difficultyLabel = dificultad ? (DIFFICULTY_LABELS[dificultad] ?? dificultad) : null;
@@ -340,7 +354,7 @@ export default function ExcursionDetailScreen() {
               className="bg-primary-100 items-center justify-center"
               style={styles.heroImage}
             >
-              <Text style={styles.heroPlaceholderIcon}>🏔</Text>
+              <Ionicons name="image-outline" size={64} color={COLORS.neutral[400]} />
             </View>
           )}
 
@@ -359,7 +373,7 @@ export default function ExcursionDetailScreen() {
             style={styles.backButton}
             activeOpacity={0.8}
           >
-            <Text style={styles.backButtonIcon}>←</Text>
+            <Ionicons name="chevron-back" size={22} color={COLORS.neutral[800]} />
           </TouchableOpacity>
         </View>
 
@@ -369,44 +383,63 @@ export default function ExcursionDetailScreen() {
             {nombre_ruta}
           </Text>
 
-          <Text className="text-neutral-500 mb-4" style={styles.zona}>
-            📍 {zona}
-          </Text>
+          <View className="flex-row items-center mb-4">
+            <Ionicons name="location-outline" size={15} color={COLORS.neutral[500]} />
+            <Text className="text-neutral-500 ml-1" style={styles.zona}>{zona}</Text>
+          </View>
 
           {/* Pills de stats */}
           <View className="flex-row flex-wrap mb-4">
-            <View className="bg-neutral-100 rounded-lg px-3 py-2 mr-2 mb-2">
-              <Text className="text-neutral-600" style={styles.statText}>
-                ⏱ {formatDuration(duracion_horas)}
+            <View className="bg-neutral-100 rounded-lg px-3 py-2 mr-2 mb-2 flex-row items-center">
+              <Ionicons name="time-outline" size={13} color={COLORS.neutral[600]} />
+              <Text className="text-neutral-600 ml-1" style={styles.statText}>
+                {formatDuration(duracion_horas)}
               </Text>
             </View>
 
             {distancia_km !== null && (
-              <View className="bg-neutral-100 rounded-lg px-3 py-2 mr-2 mb-2">
-                <Text className="text-neutral-600" style={styles.statText}>
-                  📏 {distancia_km} km
+              <View className="bg-neutral-100 rounded-lg px-3 py-2 mr-2 mb-2 flex-row items-center">
+                <Ionicons name="footsteps-outline" size={13} color={COLORS.neutral[600]} />
+                <Text className="text-neutral-600 ml-1" style={styles.statText}>
+                  {distancia_km} km
                 </Text>
               </View>
             )}
 
             {desnivel_positivo !== null && (
-              <View className="bg-neutral-100 rounded-lg px-3 py-2 mr-2 mb-2">
-                <Text className="text-neutral-600" style={styles.statText}>
-                  ↗ {desnivel_positivo} m
+              <View className="bg-neutral-100 rounded-lg px-3 py-2 mr-2 mb-2 flex-row items-center">
+                <Ionicons name="trending-up-outline" size={13} color={COLORS.neutral[600]} />
+                <Text className="text-neutral-600 ml-1" style={styles.statText}>
+                  {desnivel_positivo} m
                 </Text>
               </View>
             )}
 
-            <View className="bg-primary-50 rounded-lg px-3 py-2 mr-2 mb-2">
-              <Text className="text-primary-700 font-semibold" style={styles.statText}>
-                💰 {formatPrice(precio_persona)}/persona
+            <View className="bg-primary-50 rounded-lg px-3 py-2 mr-2 mb-2 flex-row items-center">
+              <Ionicons name="cash-outline" size={13} color={COLORS.primary[700]} />
+              <Text className="text-primary-700 font-semibold ml-1" style={styles.statText}>
+                {formatPrice(precio_persona)}/persona
               </Text>
             </View>
           </View>
 
-          <Text className="text-neutral-600 mb-2" style={styles.dateText}>
-            📅 {formatDate(fecha_inicio)}
-          </Text>
+          {/* Fecha próxima salida + frecuencia */}
+          <View className="mb-4">
+            <View className="flex-row items-center mb-1">
+              <Ionicons name="calendar-outline" size={14} color={COLORS.neutral[600]} />
+              <Text className="text-neutral-600 ml-1" style={styles.dateText}>
+                Próxima salida: {formatDate(nextDate)}
+              </Text>
+            </View>
+            {isRecurring && (
+              <View className="flex-row items-center mt-1">
+                <Ionicons name="repeat-outline" size={14} color={COLORS.primary[600]} />
+                <Text className="text-primary-600 ml-1" style={styles.dateText}>
+                  {formatFrecuencia(frecuencia)}
+                </Text>
+              </View>
+            )}
+          </View>
 
           {isSoldOut ? (
             <Text className="text-error font-semibold mb-4" style={styles.seatsText}>
@@ -419,6 +452,13 @@ export default function ExcursionDetailScreen() {
             </Text>
           )}
         </View>
+
+        {/* ── 2b. Previsión meteorológica ──────────────────────────────────── */}
+        {latitud !== null && longitud !== null && (
+          <View className="px-4 pb-4">
+            <WeatherWidget lat={latitud} lon={longitud} dateStr={nextDate} />
+          </View>
+        )}
 
         <View className="bg-neutral-200 mx-4" style={styles.separator} />
 
@@ -450,7 +490,7 @@ export default function ExcursionDetailScreen() {
                     className="bg-primary-100 items-center justify-center"
                     style={styles.guideAvatar}
                   >
-                    <Text style={styles.guideAvatarPlaceholder}>👤</Text>
+                    <Ionicons name="person-circle-outline" size={32} color={COLORS.primary[500]} />
                   </View>
                 )}
                 <View className="ml-3 flex-1">
@@ -458,9 +498,12 @@ export default function ExcursionDetailScreen() {
                     {guia.nombre} {guia.ap1}
                   </Text>
                   {guia.valoracion !== null && (
-                    <Text className="text-neutral-500 mt-1" style={styles.guideRating}>
-                      ⭐ {guia.valoracion.toFixed(1)} / 5
-                    </Text>
+                    <View className="flex-row items-center mt-1">
+                      <Ionicons name="star" size={13} color={COLORS.warning} />
+                      <Text className="text-neutral-500 ml-1" style={styles.guideRating}>
+                        {guia.valoracion.toFixed(1)} / 5
+                      </Text>
+                    </View>
                   )}
                 </View>
               </View>
@@ -508,7 +551,9 @@ export default function ExcursionDetailScreen() {
             <ActivityIndicator color={COLORS.primary[500]} style={{ marginTop: 8 }} />
           ) : photos.length === 0 ? (
             <View className="items-center py-6 px-8">
-              <Text className="text-4xl mb-2">📸</Text>
+              <View className="mb-2">
+                <Ionicons name="camera-outline" size={40} color={COLORS.neutral[400]} />
+              </View>
               <Text className="text-neutral-500 text-sm text-center">
                 Sé el primero en compartir una foto de esta excursión
               </Text>
@@ -811,9 +856,6 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 250,
   },
-  heroPlaceholderIcon: {
-    fontSize: 64,
-  },
   difficultyBadge: {
     position: 'absolute',
     bottom: 14,
@@ -835,11 +877,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.82)',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  backButtonIcon: {
-    fontSize: 20,
-    color: COLORS.neutral[800],
-    lineHeight: 22,
   },
   // ── Info ─────────────────────────────────────────────────────────────────
   routeName: {
@@ -874,9 +911,6 @@ const styles = StyleSheet.create({
     width: 50,
     height: 50,
     borderRadius: 25,
-  },
-  guideAvatarPlaceholder: {
-    fontSize: 24,
   },
   guideName: {
     fontSize: 15,

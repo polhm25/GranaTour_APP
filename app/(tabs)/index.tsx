@@ -1,8 +1,9 @@
 // Tab 1: Home — saludo al usuario, excursiones destacadas y próximas salidas.
 // Usa ScrollView con secciones fijas (no FlatList, porque la estructura no es homogénea).
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
+  Image,
   ScrollView,
   StyleSheet,
   Text,
@@ -12,10 +13,12 @@ import {
 import { useRouter } from 'expo-router';
 import { useShallow } from 'zustand/react/shallow';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 
 import { ExcursionCard } from '@/components/ExcursionCard';
 import { OfflineBanner } from '@/components/ui/OfflineBanner';
 import { ExcursionCardSkeleton } from '@/components/ui/SkeletonLoader';
+import { BurgerMenu } from '@/components/ui/BurgerMenu';
 import { COLORS } from '@/lib/constants';
 import type { ExcursionConGuia } from '@/lib/types';
 import { useExcursionsStore } from '@/stores/excursionsStore';
@@ -27,6 +30,7 @@ const MAX_UPCOMING = 5;
 export default function HomeScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const [menuVisible, setMenuVisible] = useState(false);
 
   // ── Selector del store con useShallow ────────────────────────────────────
   // Se usan flags granulares para que cada sección tenga su propio estado de carga
@@ -86,15 +90,50 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        {/* ── Header con saludo ───────────────────────────────────────── */}
+        {/* ── Header con saludo + avatar + burger ─────────────────────── */}
         <View className="px-4 pt-6 pb-4 bg-white dark:bg-neutral-800 border-b border-neutral-200 dark:border-neutral-700">
-          <Text className="text-neutral-800 dark:text-neutral-100 font-bold" style={styles.greeting}>
-            ¡Hola, {greetingName}!
-          </Text>
-          <Text className="text-neutral-500 dark:text-neutral-400 mt-1" style={styles.subGreeting}>
-            ¿A dónde vamos hoy?
-          </Text>
+          <View className="flex-row items-center justify-between">
+            {/* Avatar → perfil */}
+            <TouchableOpacity
+              onPress={() => router.navigate('/(tabs)/profile')}
+              activeOpacity={0.8}
+              style={styles.avatarButton}
+            >
+              {user?.avatar_url ? (
+                <Image source={{ uri: user.avatar_url }} style={styles.headerAvatar} />
+              ) : (
+                <View style={styles.headerAvatarPlaceholder}>
+                  <Text style={styles.headerAvatarInitials}>
+                    {user ? `${user.nombre.charAt(0)}${user.ap1.charAt(0)}` : '?'}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+
+            {/* Saludo central */}
+            <View className="flex-1 mx-3">
+              <Text className="text-neutral-800 dark:text-neutral-100 font-bold" style={styles.greeting}>
+                ¡Hola, {greetingName}!
+              </Text>
+              <Text className="text-neutral-500 dark:text-neutral-400" style={styles.subGreeting}>
+                ¿A dónde vamos hoy?
+              </Text>
+            </View>
+
+            {/* Burger menu */}
+            <TouchableOpacity
+              onPress={() => setMenuVisible(true)}
+              activeOpacity={0.7}
+              style={styles.burgerButton}
+              hitSlop={8}
+            >
+              <Ionicons name="menu" size={26} color={COLORS.neutral[700]} />
+            </TouchableOpacity>
+          </View>
         </View>
+
+        {/* Drawer lateral */}
+        <BurgerMenu visible={menuVisible} onClose={() => setMenuVisible(false)} />
 
         {/* ── Sección: Excursiones destacadas ─────────────────────────── */}
         <View className="mt-5">
@@ -197,11 +236,41 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
   },
+  // ── Header ────────────────────────────────────────────────────────────────
+  avatarButton: {
+    flexShrink: 0,
+  },
+  headerAvatar: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    borderWidth: 2,
+    borderColor: COLORS.primary[200],
+  },
+  headerAvatarPlaceholder: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: COLORS.primary[100],
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: COLORS.primary[200],
+  },
+  headerAvatarInitials: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.primary[600],
+  },
+  burgerButton: {
+    padding: 4,
+    flexShrink: 0,
+  },
   greeting: {
-    fontSize: 26,
+    fontSize: 22,
   },
   subGreeting: {
-    fontSize: 16,
+    fontSize: 14,
   },
   sectionTitle: {
     fontSize: 18,

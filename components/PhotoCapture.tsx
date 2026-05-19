@@ -10,8 +10,8 @@ import {
   type ViewStyle,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import * as MediaLibrary from 'expo-media-library';
 
+import { Ionicons } from '@expo/vector-icons';
 import { usePhotosStore } from '@/stores/photosStore';
 import { COLORS } from '@/lib/constants';
 import type { Foto } from '@/lib/types';
@@ -104,8 +104,7 @@ export function PhotoCapture({
   // ── handleGallery ───────────────────────────────────────────────────────────
 
   const handleGallery = useCallback(async () => {
-    // Solicitar permiso de galería antes de abrirla
-    const { status } = await MediaLibrary.requestPermissionsAsync();
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
       Alert.alert('Permiso denegado', 'Necesitas conceder acceso a la galería para seleccionar fotos.');
       return;
@@ -159,7 +158,7 @@ export function PhotoCapture({
       {isBusy ? (
         <ActivityIndicator color="#fff" size="small" />
       ) : (
-        <Text style={styles.cameraIcon}>📷</Text>
+        <Ionicons name="camera" size={24} color="#fff" />
       )}
     </TouchableOpacity>
   );
@@ -181,8 +180,5 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 6,
     elevation: 5,
-  },
-  cameraIcon: {
-    fontSize: 24,
   },
 });
